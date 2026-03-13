@@ -1,0 +1,5 @@
+camera_name: "wrist"
+camera_frame: "wrist_color_optical_frame"
+resolution: [640, 480]
+camera_color_image_topic: "/wrist/color/image_raw"
+camera_color_info_topic: "/wrist/color/camera_info"

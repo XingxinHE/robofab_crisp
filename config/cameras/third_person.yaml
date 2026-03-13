@@ -1,0 +1,5 @@
+camera_name: "third_person"
+camera_frame: "third_person_color_optical_frame"
+resolution: [640, 480]
+camera_color_image_topic: "/third_person/color/image_raw"
+camera_color_info_topic: "/third_person/color/camera_info"

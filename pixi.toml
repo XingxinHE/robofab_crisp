@@ -1,0 +1,43 @@
+[workspace]
+authors = ["Xingxin HE <xingxin.he@connect.ust.hk>"]
+channels = ["robostack-humble", "conda-forge"]
+name = "robofab_crisp"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[activation.env]
+ROS_DOMAIN_ID = "100"
+RMW_IMPLEMENTATION = "rmw_zenoh_cpp"
+ZENOH_SESSION_CONFIG_URI="./configs/zenoh_client.json5"
+CRISP_CONFIG_PATH="./config"
+
+[tasks]
+recording-preflight = "python scripts/recording_preflight.py"
+record-fr3 = "bash scripts/record_fr3_streamed.sh"
+episode-stats = "python analysis/episode_stats.py"
+episode-video-info = "python analysis/episode_video_info.py"
+episode-playback = "python analysis/episode_robot_playback.py"
+
+[dependencies]
+python = ">=3.11,<3.12"
+ros-humble-desktop = ">=0.10.0,<0.11"
+colcon-common-extensions = ">=0.3.0,<0.4"
+ros-humble-ros2-control = ">=2.51.0,<3"
+ros-humble-ros2-controllers = ">=2.48.0,<3"
+ros-humble-image-transport-plugins = ">=2.5.3,<3"
+ros-humble-rmw-zenoh-cpp = ">=0.1.2,<0.2"
+numpy = "<2"
+scipy = ">=1.15.2,<2"
+pynput = "*"
+rerun-sdk = "=0.22.1"
+libstdcxx-ng = ">=12.2.0"
+compilers = "*"
+cmake = "*"
+pkg-config = "*"
+make = "*"
+ninja = "*"
+
+[pypi-dependencies]
+crisp-gym = { git = "https://github.com/utiasDSL/crisp_gym.git", rev = "main" }
+lerobot = { git = "https://github.com/huggingface/lerobot", rev = "dacd1d7f5c719c3e56d7b7154a751bef6d5bd23c", extras = ["smolvla"] }
+tyro = "*"

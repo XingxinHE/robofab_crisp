@@ -1,0 +1,5 @@
+camera_name: "realsense"
+camera_frame: "camera_color_optical_frame"
+resolution: [640, 480]
+camera_color_image_topic: "/camera/color/image_raw"
+camera_color_info_topic: "/camera/color/camera_info"
