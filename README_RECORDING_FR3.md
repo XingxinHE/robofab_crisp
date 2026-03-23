@@ -103,6 +103,40 @@ pixi run record-fr3-viser -- \
 This mode drives `env.robot.set_target(...)` directly from the Viser gumball and records the same LeRobot-format dataset schema.
 Unlike streamed teleop recording, this mode does not require `/phone_pose` or `/phone_gripper` topics.
 
+### Optional: Xbox gamepad teleop (translation-first)
+
+Plug your Xbox controller into this machine and run:
+
+```bash
+pixi run gamepad-teleop-fr3
+```
+
+This standalone interface module directly teleoperates FR3 through `ManipulatorCartesianEnv` (no SpaceMouse/phone topics required).
+
+Default mapping:
+- left stick: XY translation
+- LT / RT: Z down / up
+- LB / RB: yaw + / -
+- A: close gripper (latched)
+- X: open gripper (latched)
+- Y: sync/reset robot target
+- B: quit
+- Start: toggle coarse/fine mode
+- Back: toggle roll/pitch mode
+
+Useful options:
+
+```bash
+# slower, fine motion defaults
+pixi run gamepad-teleop-fr3 -- --linear-step 0.002 --yaw-step 0.02
+
+# start without homing
+pixi run gamepad-teleop-fr3 -- --no-home-on-start
+
+# enable roll/pitch immediately
+pixi run gamepad-teleop-fr3 -- --enable-roll-pitch
+```
+
 ## Smoke Test (first episode)
 
 ```bash
