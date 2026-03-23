@@ -1,6 +1,7 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+crisp.log
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -11,3 +12,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# training
+outputs/

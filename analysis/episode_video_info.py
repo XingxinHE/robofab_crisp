@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import tyro
 
+
 @dataclass
 class VideoInfoArgs:
     """Extract per-episode video metadata (auto-detects all video/camera keys)."""
@@ -23,6 +24,9 @@ class VideoInfoArgs:
     ffprobe_timeout: float = 5.0
     format: Literal["text", "json"] = "text"
     json_out: str | None = None
+    save_videos: bool = True
+    video_out_dir: str = "analysis/video"
+
 
 def _get_lerobot_home() -> Path:
     try:
@@ -83,7 +87,9 @@ def _probe_video_ffprobe(path: Path, timeout_sec: float) -> dict[str, Any]:
         "-show_format",
         str(path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout_sec)
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, check=False, timeout=timeout_sec
+    )
     if proc.returncode != 0:
         return {
             "ffprobe_available": True,
@@ -93,7 +99,10 @@ def _probe_video_ffprobe(path: Path, timeout_sec: float) -> dict[str, Any]:
     raw = json.loads(proc.stdout or "{}")
     streams = raw.get("streams", [])
     format_info = raw.get("format", {})
-    stream = next((s for s in streams if s.get("codec_type") == "video"), streams[0] if streams else {})
+    stream = next(
+        (s for s in streams if s.get("codec_type") == "video"),
+        streams[0] if streams else {},
+    )
 
     return {
         "ffprobe_available": True,
@@ -101,12 +110,19 @@ def _probe_video_ffprobe(path: Path, timeout_sec: float) -> dict[str, Any]:
         "pix_fmt": stream.get("pix_fmt"),
         "width": stream.get("width"),
         "height": stream.get("height"),
-        "fps": _parse_rate(stream.get("avg_frame_rate")) or _parse_rate(stream.get("r_frame_rate")),
-        "nb_frames": int(stream["nb_frames"]) if stream.get("nb_frames", "").isdigit() else None,
+        "fps": _parse_rate(stream.get("avg_frame_rate"))
+        or _parse_rate(stream.get("r_frame_rate")),
+        "nb_frames": int(stream["nb_frames"])
+        if stream.get("nb_frames", "").isdigit()
+        else None,
         "duration_seconds": (
-            float(format_info["duration"]) if format_info.get("duration") not in (None, "N/A") else None
+            float(format_info["duration"])
+            if format_info.get("duration") not in (None, "N/A")
+            else None
         ),
-        "bit_rate": int(format_info["bit_rate"]) if format_info.get("bit_rate", "").isdigit() else None,
+        "bit_rate": int(format_info["bit_rate"])
+        if format_info.get("bit_rate", "").isdigit()
+        else None,
     }
 
 
@@ -139,7 +155,9 @@ def _build_summary(
 
     features = info.get("features", {})
     video_keys = sorted(
-        key for key, feature in features.items() if isinstance(feature, dict) and feature.get("dtype") == "video"
+        key
+        for key, feature in features.items()
+        if isinstance(feature, dict) and feature.get("dtype") == "video"
     )
 
     if episode_filter:
@@ -162,7 +180,9 @@ def _build_summary(
             feature_cfg = features.get(video_key, {})
             expected = {}
             if isinstance(feature_cfg, dict):
-                expected = feature_cfg.get("info") or feature_cfg.get("video_info") or {}
+                expected = (
+                    feature_cfg.get("info") or feature_cfg.get("video_info") or {}
+                )
 
             path = _episode_video_path(dataset_dir, info, episode_index, video_key)
             exists = path.exists()
@@ -177,7 +197,9 @@ def _build_summary(
             }
 
             if exists:
-                video_entry["actual"] = _probe_video_ffprobe(path, timeout_sec=ffprobe_timeout)
+                video_entry["actual"] = _probe_video_ffprobe(
+                    path, timeout_sec=ffprobe_timeout
+                )
 
             episode_entry["videos"].append(video_entry)
 
@@ -199,10 +221,47 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _sanitize_name(value: str) -> str:
+    cleaned = [c if c.isalnum() or c in {"-", "_"} else "_" for c in value]
+    return "".join(cleaned).strip("_") or "dataset"
+
+
+def _copy_episode_videos(summary: dict[str, Any], output_dir: Path) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    repo_or_dataset = summary.get("repo_id") or Path(summary["dataset_dir"]).name
+    repo_tag = _sanitize_name(str(repo_or_dataset))
+
+    copied_paths: list[Path] = []
+    for episode in summary.get("episodes", []):
+        episode_index = int(episode["episode_index"])
+        for video in episode.get("videos", []):
+            if not video.get("exists"):
+                continue
+
+            src = Path(video["path"])
+            if not src.exists():
+                continue
+
+            suffix = src.suffix or ".mp4"
+            video_key = str(video.get("video_key", "video"))
+            safe_key = _sanitize_name(video_key.replace(".", "_"))
+            dst_name = f"{repo_tag}__episode_{episode_index:06d}__{safe_key}{suffix}"
+            dst = output_dir / dst_name
+
+            shutil.copy2(src, dst)
+            video["local_copy_path"] = str(dst.resolve())
+            copied_paths.append(dst)
+
+    return copied_paths
+
+
 def _print_text(summary: dict[str, Any]) -> None:
     print(f"Dataset: {summary['dataset_dir']}")
     print(f"Repo ID: {summary.get('repo_id')}")
-    print(f"Detected video keys: {', '.join(summary['detected_video_keys']) if summary['detected_video_keys'] else '-'}")
+    print(
+        f"Detected video keys: {', '.join(summary['detected_video_keys']) if summary['detected_video_keys'] else '-'}"
+    )
 
     for episode in summary["episodes"]:
         print()
@@ -217,9 +276,9 @@ def _print_text(summary: dict[str, Any]) -> None:
             print(f"    size_bytes: {_fmt(video.get('size_bytes'))}")
             if video["exists"]:
                 print(
-                    f"    actual: { _fmt(actual.get('width')) }x{ _fmt(actual.get('height')) }, "
-                    f"fps={ _fmt(actual.get('fps')) }, frames={ _fmt(actual.get('nb_frames')) }, "
-                    f"codec={ _fmt(actual.get('codec')) }, duration_s={ _fmt(actual.get('duration_seconds')) }"
+                    f"    actual: {_fmt(actual.get('width'))}x{_fmt(actual.get('height'))}, "
+                    f"fps={_fmt(actual.get('fps'))}, frames={_fmt(actual.get('nb_frames'))}, "
+                    f"codec={_fmt(actual.get('codec'))}, duration_s={_fmt(actual.get('duration_seconds'))}"
                 )
 
 
@@ -246,6 +305,12 @@ def main() -> int:
         print(json.dumps(summary, indent=2))
     else:
         _print_text(summary)
+
+    copied_paths: list[Path] = []
+    if args.save_videos:
+        out_dir = Path(args.video_out_dir).expanduser().resolve()
+        copied_paths = _copy_episode_videos(summary, out_dir)
+        print(f"\nSaved {len(copied_paths)} video file(s) to: {out_dir}")
 
     if args.json_out:
         output_path = Path(args.json_out).expanduser().resolve()

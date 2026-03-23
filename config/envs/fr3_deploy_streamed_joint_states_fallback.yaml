@@ -13,6 +13,14 @@ joint_control_param_config: null
 
 robot_config:
   robot_type: "franka"
+  home_config:
+    - -1.73960110e-02
+    - 9.55319758e-02
+    - 8.09703053e-04
+    - -1.94272034
+    - -4.01435784e-03
+    - 2.06584183
+    - 7.97426445e-01
   current_pose_topic: "current_pose"
   target_pose_topic: "target_pose"
   target_joint_topic: "target_joint"
@@ -25,7 +33,7 @@ gripper_config:
   max_value: 0.08
   command_topic: "/gripper/gripper_position_controller/commands"
   joint_state_topic: "/joint_states"
-  # This fallback assumes the first gripper finger is the 8th entry in /joint_states.
+  # Fallback assumes first gripper finger is 8th entry in /joint_states.
   index: 7
   publish_frequency: 30.0
   max_delta: 1.0

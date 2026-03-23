@@ -13,7 +13,13 @@ CRISP_CONFIG_PATH="./config"
 
 [tasks]
 recording-preflight = "python scripts/recording_preflight.py"
+web-teleop = "python scripts/web_teleop_viser.py"
 record-fr3 = "bash scripts/record_fr3_streamed.sh"
+record-fr3-viser = "bash scripts/record_fr3_viser_direct.sh"
+clone-dataset-fix-feat = "python scripts/clone_dataset_fix_features.py"
+train-act = "bash scripts/train_act.sh"
+deployment-preflight = "python scripts/deployment_preflight.py"
+deploy-act = "bash scripts/deploy_act.sh"
 episode-stats = "python analysis/episode_stats.py"
 episode-video-info = "python analysis/episode_video_info.py"
 episode-playback = "python analysis/episode_robot_playback.py"
@@ -41,3 +47,5 @@ ninja = "*"
 crisp-gym = { git = "https://github.com/utiasDSL/crisp_gym.git", rev = "main" }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "dacd1d7f5c719c3e56d7b7154a751bef6d5bd23c", extras = ["smolvla"] }
 tyro = "*"
+viser = ">=1.0.24, <2"
+robot-descriptions = ">=1.23.0, <2"
