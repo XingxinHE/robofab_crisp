@@ -39,6 +39,7 @@ class GamepadCommand:
     gripper_target: float
     should_quit: bool
     sync_requested: bool
+    recording_action: str | None
     coarse_mode: bool
     roll_pitch_enabled: bool
 
@@ -81,6 +82,7 @@ class XboxGamepad6Dof:
 
         should_quit = False
         sync_requested = False
+        recording_action: str | None = None
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -99,6 +101,18 @@ class XboxGamepad6Dof:
                     self.coarse_mode = not self.coarse_mode
                 elif event.button == 6:  # Back -> roll/pitch toggle
                     self.roll_pitch_enabled = not self.roll_pitch_enabled
+            elif event.type == pygame.JOYHATMOTION:
+                # D-pad recording workflow for ROSRecordingManager:
+                # up=record toggle, right=save, left=delete, down=exit.
+                hat_x, hat_y = event.value
+                if hat_y == 1:
+                    recording_action = "record"
+                elif hat_x == 1:
+                    recording_action = "save"
+                elif hat_x == -1:
+                    recording_action = "delete"
+                elif hat_y == -1:
+                    recording_action = "exit"
 
         linear_step = self.cfg.linear_step
         yaw_step = self.cfg.yaw_step
@@ -147,6 +161,7 @@ class XboxGamepad6Dof:
             gripper_target=self.gripper_target,
             should_quit=should_quit,
             sync_requested=sync_requested,
+            recording_action=recording_action,
             coarse_mode=self.coarse_mode,
             roll_pitch_enabled=self.roll_pitch_enabled,
         )

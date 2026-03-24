@@ -137,6 +137,21 @@ pixi run gamepad-teleop-fr3 -- --no-home-on-start
 pixi run gamepad-teleop-fr3 -- --enable-roll-pitch
 ```
 
+Record with gamepad-only workflow (teleop + recording controls on one controller):
+
+```bash
+pixi run record-fr3-gamepad -- \
+  --repo-id local/fr3_dualcam_streamed \
+  --tasks "pick and place the object" \
+  --num-episodes 10
+```
+
+Recording controls in this mode (D-pad):
+- Up: start/stop recording
+- Right: save episode
+- Left: delete episode
+- Down: exit
+
 ## Smoke Test (first episode)
 
 ```bash
