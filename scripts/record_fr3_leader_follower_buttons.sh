@@ -33,8 +33,9 @@ EOF
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-exec python "${SCRIPT_DIR}/record_lerobot_leader_follower_patch.py" \
+exec python "${ROOT_DIR}/teleoperations/01_leader_follower/record_lerobot_format_leader_follower.py" \
   --leader-config fr3_left_leader \
   --leader-namespace left \
   --follower-config fr3_right_leader_follower_recording \
