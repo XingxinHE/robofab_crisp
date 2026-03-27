@@ -15,8 +15,46 @@ import numpy as np
 import rclpy
 from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 
+from enum import Enum
+
+home_close_to_table = [
+    -0.02312892,
+    -0.10664185,
+    -0.0195703,
+    -1.75644521,
+    -0.00732298,
+    1.68992915,
+    0.8040582,
+]
+
+home_front_up = [
+    -0.02312892,
+    -0.10664185,
+    -0.0195703,
+    -1.75644521,
+    -0.00732298,
+    1.68992915,
+    0.8040582,
+]
+
+
+class HomeConfig(Enum):
+    """Enum for different home configurations."""
+
+    CLOSE_TO_TABLE = home_close_to_table
+    FRONT_UP = home_front_up
+
+    def randomize(self, noise: float = 0.01) -> list:
+        """Randomize the home configuration."""
+        import numpy as np
+
+        return (
+            np.array(self.value) + np.random.uniform(-noise, noise, size=len(self.value))
+        ).tolist()
+
+
 import crisp_gym  # noqa: F401
-from crisp_gym.config.home import HomeConfig
+# from crisp_gym.config.home import HomeConfig
 from crisp_gym.envs.manipulator_env import ManipulatorCartesianEnv, make_env
 from crisp_gym.envs.manipulator_env_config import list_env_configs
 from crisp_gym.record import recording_manager as _rm

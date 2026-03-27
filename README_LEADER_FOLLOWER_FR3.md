@@ -1,5 +1,7 @@
 # FR3 Leader/Follower Runbook (Dual Robot, Same RT PC)
 
+For the 3-camera hardware setup, use `README_LEADER_FOLLOWER_FR3_3CAMS.md`.
+
 This runbook uses two FR3 robots on the same RT PC:
 - leader: `left` namespace, IP `172.16.0.33`
 - follower: `right` namespace, IP `172.16.0.3`
