@@ -15,12 +15,51 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from scipy.spatial.transform import Rotation
 from std_msgs.msg import String
 
-from crisp_gym.config.home import HomeConfig
+from enum import Enum
+
+home_close_to_table = [
+    -0.02312892,
+    -0.10664185,
+    -0.0195703,
+    -1.75644521,
+    -0.00732298,
+    1.68992915,
+    0.8040582,
+]
+
+home_front_up = [
+    -0.02312892,
+    -0.10664185,
+    -0.0195703,
+    -1.75644521,
+    -0.00732298,
+    1.68992915,
+    0.8040582,
+]
+
+
+class HomeConfig(Enum):
+    """Enum for different home configurations."""
+
+    CLOSE_TO_TABLE = home_close_to_table
+    FRONT_UP = home_front_up
+
+    def randomize(self, noise: float = 0.01) -> list:
+        """Randomize the home configuration."""
+        import numpy as np
+
+        return (
+            np.array(self.value)
+            + np.random.uniform(-noise, noise, size=len(self.value))
+        ).tolist()
+
+
 from crisp_gym.envs.manipulator_env import ManipulatorCartesianEnv, make_env
 from crisp_gym.envs.manipulator_env_config import list_env_configs
 from crisp_gym.record.recording_manager import make_recording_manager
@@ -138,6 +177,22 @@ def print_mapping() -> None:
     print("  D-pad Down : exit recording manager")
 
 
+def get_existing_total_episodes(repo_id: str) -> int | None:
+    try:
+        from lerobot.utils.constants import HF_LEROBOT_HOME  # type: ignore
+    except ImportError:
+        from lerobot.constants import HF_LEROBOT_HOME  # type: ignore
+
+    info_path = Path(HF_LEROBOT_HOME) / repo_id / "meta" / "info.json"
+    if not info_path.exists():
+        return None
+    try:
+        info = json.loads(info_path.read_text())
+        return int(info.get("total_episodes", 0))
+    except Exception:
+        return None
+
+
 def main() -> int:
     args = parse_args()
     setup_logging(level=args.log_level)
@@ -196,6 +251,36 @@ def main() -> int:
         env.reset()
 
         features = get_features(env=env, ignore_keys=[])
+
+        existing_total = get_existing_total_episodes(args.repo_id)
+        if not args.resume and existing_total is not None:
+            logger.error(
+                "Dataset %s already exists with total_episodes=%d. "
+                "Use --resume to append, or use a new --repo-id.",
+                args.repo_id,
+                existing_total,
+            )
+            return 2
+
+        if args.resume and existing_total is not None:
+            if args.num_episodes <= existing_total:
+                logger.error(
+                    "Resume requested but --num-episodes=%d <= existing total_episodes=%d for %s. "
+                    "Set --num-episodes to a larger total target (e.g. %d).",
+                    args.num_episodes,
+                    existing_total,
+                    args.repo_id,
+                    existing_total + 10,
+                )
+                return 2
+            logger.info(
+                "Resuming dataset %s: existing=%d, target=%d, episodes_to_add=%d",
+                args.repo_id,
+                existing_total,
+                args.num_episodes,
+                args.num_episodes - existing_total,
+            )
+
         recording_manager = make_recording_manager(
             recording_manager_type=args.recording_manager_type,
             features=features,
@@ -341,6 +426,13 @@ def main() -> int:
             env.gripper.open()
 
         with recording_manager:
+            if recording_manager.done():
+                logger.warning(
+                    "Recording manager is already done: episode_count=%d, num_episodes=%d. "
+                    "Increase --num-episodes to continue recording.",
+                    recording_manager.episode_count,
+                    recording_manager.num_episodes,
+                )
             while not recording_manager.done():
                 logger.info(
                     "→ Episode %s / %s",

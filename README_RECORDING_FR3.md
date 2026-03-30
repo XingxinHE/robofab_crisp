@@ -1,6 +1,7 @@
 # FR3 Data Collection Runbook (CRISP + SpaceMouse + Dual D435)
 
 For dual-robot FR3 leader/follower setup, see `README_LEADER_FOLLOWER_FR3.md`.
+For single-robot FR3 + gamepad + 3 cameras setup, see `README_GAMEPAD_FR3_3CAMS.md`.
 
 This runbook records local LeRobot-format data with:
 - FR3 state + gripper state from ROS2 topics
