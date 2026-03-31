@@ -12,33 +12,13 @@ cartesian_control_param_config: null
 joint_control_param_config: null
 
 robot_config:
-  robot_type: "franka"
-  current_pose_topic: "current_pose"
-  target_pose_topic: "target_pose"
-  target_joint_topic: "target_joint"
-  current_joint_topic: "joint_states"
-  current_twist_topic: "current_twist"
-  publish_frequency: 50.0
+  from_yaml: robots/fr3_root.yaml
 
 gripper_config:
-  min_value: 0.0
-  max_value: 0.08
-  command_topic: "/gripper/gripper_position_controller/commands"
-  joint_state_topic: "/franka_gripper/joint_states"
-  index: 0
-  publish_frequency: 30.0
-  max_delta: 1.0
+  from_yaml: grippers/fr3_root_metric_direct.yaml
 
 camera_configs:
-  - camera_name: "wrist"
-    camera_frame: "wrist_color_optical_frame"
-    resolution: [256, 256]
-    camera_color_image_topic: "/wrist/color/image_raw"
-    camera_color_info_topic: "/wrist/color/camera_info"
-  - camera_name: "third_person"
-    camera_frame: "third_person_color_optical_frame"
-    resolution: [256, 256]
-    camera_color_image_topic: "/third_person/color/image_raw"
-    camera_color_info_topic: "/third_person/color/camera_info"
+  - from_yaml: cameras/wrist_256.yaml
+  - from_yaml: cameras/third_person_256.yaml
 
 sensor_configs: []

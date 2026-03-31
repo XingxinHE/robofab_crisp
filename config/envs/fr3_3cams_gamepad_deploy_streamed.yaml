@@ -12,46 +12,14 @@ cartesian_control_param_config: null
 joint_control_param_config: null
 
 robot_config:
-  robot_type: "franka"
-  home_config:
-    - -1.73960110e-02
-    - 9.55319758e-02
-    - 8.09703053e-04
-    - -1.94272034
-    - -4.01435784e-03
-    - 2.06584183
-    - 7.97426445e-01
-  current_pose_topic: "current_pose"
-  target_pose_topic: "target_pose"
-  target_joint_topic: "target_joint"
-  current_joint_topic: "joint_states"
-  current_twist_topic: "current_twist"
-  publish_frequency: 50.0
+  from_yaml: robots/fr3_root_home_lab.yaml
 
 gripper_config:
-  min_value: 0.0
-  max_value: 1.0
-  command_topic: "/gripper/gripper_position_controller/commands"
-  joint_state_topic: "/gripper/joint_states"
-  index: 0
-  publish_frequency: 30.0
-  max_delta: 1.0
+  from_yaml: grippers/fr3_root_normalized_direct.yaml
 
 camera_configs:
-  - camera_name: "robot0_eye_in_hand"
-    camera_frame: "robot0_eye_in_hand_color_optical_frame"
-    resolution: [256, 256]
-    camera_color_image_topic: "/robot0_eye_in_hand/color/image_raw"
-    camera_color_info_topic: "/robot0_eye_in_hand/color/camera_info"
-  - camera_name: "robot0_agentview_left"
-    camera_frame: "robot0_agentview_left_color_optical_frame"
-    resolution: [256, 256]
-    camera_color_image_topic: "/robot0_agentview_left/color/image_raw"
-    camera_color_info_topic: "/robot0_agentview_left/color/camera_info"
-  - camera_name: "robot0_agentview_right"
-    camera_frame: "robot0_agentview_right_color_optical_frame"
-    resolution: [256, 256]
-    camera_color_image_topic: "/robot0_agentview_right/color/image_raw"
-    camera_color_info_topic: "/robot0_agentview_right/color/camera_info"
+  - from_yaml: cameras/robot0_eye_in_hand_256.yaml
+  - from_yaml: cameras/robot0_agentview_left_256.yaml
+  - from_yaml: cameras/robot0_agentview_right_256.yaml
 
 sensor_configs: []

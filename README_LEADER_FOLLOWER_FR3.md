@@ -1,5 +1,7 @@
 # FR3 Leader/Follower Runbook (Dual Robot, Same RT PC)
 
+See `README_WORKFLOWS.md` for normalized task aliases and config-composition conventions.
+
 For the 3-camera hardware setup, use `README_LEADER_FOLLOWER_FR3_3CAMS.md`.
 
 This runbook uses two FR3 robots on the same RT PC:
@@ -16,9 +18,9 @@ This runbook uses two FR3 robots on the same RT PC:
   - `config/envs/fr3_right_leader_follower_teleop.yaml`
   - `config/envs/fr3_right_leader_follower_recording.yaml`
 - New tasks in `robofab_crisp`:
-  - `leader-follower-teleop-fr3`
-  - `record-fr3-leader-follower`
-  - `record-fr3-leader-follower-buttons`
+  - `teleop-leader-follower-fr3`
+  - `record-leader-follower-fr3`
+  - `record-leader-follower-fr3-buttons`
   - `record-transition-keyboard`
 
 ## 1) Realtime PC bringup (`module_run_on_RT_pc/pixi_franka_ros2`)
@@ -60,7 +62,7 @@ pixi run -e humble ros2 topic echo /right/current_pose --once
 
 ```bash
 # terminal 3 (GPU/ops PC)
-pixi run leader-follower-teleop-fr3 -- \
+pixi run teleop-leader-follower-fr3 -- \
   --leader-config fr3_left_leader \
   --leader-namespace left \
   --follower-config fr3_right_leader_follower_teleop \
@@ -98,7 +100,7 @@ If left changes but right does not, stop and check:
 ## 3) Recording test (`robofab_crisp`)
 
 ```bash
-pixi run record-fr3-leader-follower -- \
+pixi run record-leader-follower-fr3 -- \
   --repo-id local/fr3_leader_follower \
   --tasks "pick and place the object" \
   --num-episodes 1
@@ -141,7 +143,7 @@ This should run `franka_pilot_buttons` + `franka_buttons_to_record` and publish 
 ### B) Start leader/follower recording in ROS mode (`robofab_crisp`)
 
 ```bash
-pixi run record-fr3-leader-follower-buttons -- \
+pixi run record-leader-follower-fr3-buttons -- \
   --repo-id local/fr3_leader_follower_buttons \
   --tasks "pick and place the object" \
   --num-episodes 1

@@ -1,0 +1,7 @@
+min_value: 0.0
+max_value: 0.08
+command_topic: "/gripper/gripper_position_controller/commands"
+joint_state_topic: "/franka_gripper/joint_states"
+index: 0
+publish_frequency: 30.0
+max_delta: 1.0

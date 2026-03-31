@@ -1,0 +1,7 @@
+min_value: 0.0
+max_value: 1.0
+command_topic: "/gripper/gripper_position_controller/commands"
+joint_state_topic: "/joint_states"
+index: 7
+publish_frequency: 30.0
+max_delta: 1.0

@@ -1,5 +1,7 @@
 # FR3 Leader/Follower 3-Camera Runbook
 
+See `README_WORKFLOWS.md` for normalized task aliases and config-composition conventions.
+
 Target setup:
 - Leader FR3: namespace `left`, IP `172.16.0.33`
 - Follower FR3: namespace `right`, IP `172.16.0.3`
@@ -83,7 +85,7 @@ ros2 topic echo /record_transition
 In `robofab_crisp`:
 
 ```bash
-pixi run record-fr3-leader-follower-3cams -- \
+pixi run record-leader-follower-fr3-3cams -- \
   --repo-id local/fr3_leader_follower_3cams \
   --tasks "pick and place" \
   --num-episodes 1
@@ -100,7 +102,7 @@ Keyboard controls:
 In `robofab_crisp`:
 
 ```bash
-pixi run record-fr3-leader-follower-buttons-3cams -- \
+pixi run record-leader-follower-fr3-buttons-3cams -- \
   --repo-id local/fr3_leader_follower_3cams \
   --tasks "turn on microwave" \
   --num-episodes 10
@@ -177,7 +179,7 @@ pixi run -e humble franka \
 Then deploy:
 
 ```bash
-pixi run deploy-act-3cams -- \
+pixi run deploy-act-fr3-3cams -- \
   --model-path outputs/train/2026-03-26/22-09-39_act/checkpoints/last/pretrained_model \
   --repo-id local/fr3_leader_follower_3cams_open_deploy \
   --num-episodes 1

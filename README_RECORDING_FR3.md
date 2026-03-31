@@ -2,6 +2,7 @@
 
 For dual-robot FR3 leader/follower setup, see `README_LEADER_FOLLOWER_FR3.md`.
 For single-robot FR3 + gamepad + 3 cameras setup, see `README_GAMEPAD_FR3_3CAMS.md`.
+For workflow/task naming and config-composition conventions, see `README_WORKFLOWS.md`.
 
 This runbook records local LeRobot-format data with:
 - FR3 state + gripper state from ROS2 topics
@@ -62,12 +63,12 @@ In `robofab_crisp`:
 
 ```bash
 # terminal 2
-pixi run recording-preflight
+pixi run preflight-recording-fr3
 ```
 
 ```bash
 # terminal 3
-pixi run record-fr3 -- \
+pixi run record-streamed-fr3 -- \
   --repo-id local/fr3_dualcam_streamed \
   --tasks "pick and place the object" \
   --num-episodes 1
@@ -75,11 +76,11 @@ pixi run record-fr3 -- \
 
 ### Optional: web teleop leader (replace SpaceMouse)
 
-If you want to control streamed teleop from a browser instead of SpaceMouse, run this on GPU PC before `record-fr3`:
+If you want to control streamed teleop from a browser instead of SpaceMouse, run this on GPU PC before `record-streamed-fr3`:
 
 ```bash
 # terminal 0 (in robofab_crisp)
-pixi run web-teleop
+pixi run teleop-streamed-web
 ```
 
 Then open the printed URL (default `http://0.0.0.0:8080` from that machine's IP), drag the end-effector handle, and use:
@@ -97,7 +98,7 @@ This publishes the same streamed leader topics used by recording:
 If streamed leader/follower teleop is unstable, use direct Viser teleop recording:
 
 ```bash
-pixi run record-fr3-viser -- \
+pixi run record-viser-fr3 -- \
   --repo-id local/fr3_dualcam_streamed \
   --tasks "pick and place the object" \
   --num-episodes 1
@@ -111,7 +112,7 @@ Unlike streamed teleop recording, this mode does not require `/phone_pose` or `/
 Plug your Xbox controller into this machine and run:
 
 ```bash
-pixi run gamepad-teleop-fr3
+pixi run teleop-gamepad-fr3
 ```
 
 This standalone interface module directly teleoperates FR3 through `ManipulatorCartesianEnv` (no SpaceMouse/phone topics required).
@@ -131,19 +132,19 @@ Useful options:
 
 ```bash
 # slower, fine motion defaults
-pixi run gamepad-teleop-fr3 -- --linear-step 0.002 --yaw-step 0.02
+pixi run teleop-gamepad-fr3 -- --linear-step 0.002 --yaw-step 0.02
 
 # start without homing
-pixi run gamepad-teleop-fr3 -- --no-home-on-start
+pixi run teleop-gamepad-fr3 -- --no-home-on-start
 
 # enable roll/pitch immediately
-pixi run gamepad-teleop-fr3 -- --enable-roll-pitch
+pixi run teleop-gamepad-fr3 -- --enable-roll-pitch
 ```
 
 Record with gamepad-only workflow (teleop + recording controls on one controller):
 
 ```bash
-pixi run record-fr3-gamepad -- \
+pixi run record-gamepad-fr3 -- \
   --repo-id local/fr3_dualcam_streamed_turn \
   --tasks "turn on microwave" \
   --num-episodes 10
@@ -158,7 +159,7 @@ Recording controls in this mode (D-pad):
 ## Smoke Test (first episode)
 
 ```bash
-pixi run record-fr3 -- \
+pixi run record-streamed-fr3 -- \
   --repo-id local/fr3_dualcam_streamed \
   --tasks "smoke test task" \
   --num-episodes 1
@@ -173,7 +174,7 @@ During recording:
 ## Resume Recording
 
 ```bash
-pixi run record-fr3 -- \
+pixi run record-streamed-fr3 -- \
   --repo-id local/fr3_dualcam_streamed \
   --resume \
   --num-episodes 50 \
@@ -182,13 +183,13 @@ pixi run record-fr3 -- \
 
 ## Notes
 
-- `record-fr3` enforces:
+- `record-streamed-fr3` enforces:
   - `--use-streamed-teleop`
   - `--recording-manager-type keyboard`
   - `--fps 15`
   - `--no-push-to-hub`
 - `train-act` enforces local-only training (`--policy.push_to_hub=false`).
-- `deploy-act` pins CRISP sync policy mode (`lerobot_policy`) and auto-selects deployment env config from preflight.
+- `deploy-act-fr3` pins CRISP sync policy mode (`lerobot_policy`) and auto-selects deployment env config from preflight.
 - The preflight step auto-selects the follower config:
   - primary: `fr3_recording_streamed` (`/franka_gripper/joint_states`)
   - fallback: `fr3_recording_streamed_joint_states_fallback` (`/joint_states`, index `7`)
@@ -320,41 +321,41 @@ In `robofab_crisp`:
 
 ```bash
 # terminal 2
-pixi run deployment-preflight
+pixi run preflight-deploy-fr3
 ```
 
 ```bash
 # terminal 3
-pixi run deploy-act -- \
+pixi run deploy-act-fr3 -- \
   --model-path outputs/train/<date>/<time>_act/checkpoints/last/pretrained_model \
   --repo-id local/fr3_dualcam_streamed_deploy \
   --num-episodes 1
 
-pixi run deploy-act -- \
+pixi run deploy-act-fr3 -- \
   --model-path outputs/train/2026-03-17/11-47-16_act/checkpoints/last/pretrained_model \
   --repo-id local/fr3_dualcam_streamed_deploy \
   --num-episodes 1
 
-pixi run deploy-act -- \
+pixi run deploy-act-fr3 -- \
   --model-path outputs/train/2026-03-17/11-47-16_act/checkpoints/last/pretrained_model \
   --repo-id local/fr3_dualcam_streamed_deploy \
   --resume \
   --num-episodes 5
 ```
 
-If `--model-path` is omitted, `deploy-act` auto-selects the most recent `outputs/train/**/pretrained_model`.
-If `--repo-id` already exists and `--resume` is not provided, `deploy-act` fails early with a clear message.
-If `--resume` is provided but the existing repo is incomplete (for example missing `meta/tasks.jsonl` after an interrupted run), `deploy-act` now fails early and asks you to delete that repo directory or use a new `--repo-id`.
+If `--model-path` is omitted, `deploy-act-fr3` auto-selects the most recent `outputs/train/**/pretrained_model`.
+If `--repo-id` already exists and `--resume` is not provided, `deploy-act-fr3` fails early with a clear message.
+If `--resume` is provided but the existing repo is incomplete (for example missing `meta/tasks.jsonl` after an interrupted run), `deploy-act-fr3` now fails early and asks you to delete that repo directory or use a new `--repo-id`.
 
 ### Deployment controls
 
-`deploy-act` uses CRISP keyboard recording manager. During deployment episodes:
+`deploy-act-fr3` uses CRISP keyboard recording manager. During deployment episodes:
 - `r`: start/stop an episode rollout
 - `s`: save the rollout
 - `d`: delete the rollout
 - `q`: quit
 
-### What `deploy-act` enforces
+### What `deploy-act-fr3` enforces
 
 - policy wrapper: `lerobot_policy` (sync)
 - env config: auto-selected by preflight

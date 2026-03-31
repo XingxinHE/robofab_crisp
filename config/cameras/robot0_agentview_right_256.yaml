@@ -1,0 +1,5 @@
+camera_name: "robot0_agentview_right"
+camera_frame: "robot0_agentview_right_color_optical_frame"
+resolution: [256, 256]
+camera_color_image_topic: "/robot0_agentview_right/color/image_raw"
+camera_color_info_topic: "/robot0_agentview_right/color/camera_info"

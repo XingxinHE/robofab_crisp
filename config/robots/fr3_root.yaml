@@ -1,0 +1,7 @@
+robot_type: "franka"
+current_pose_topic: "current_pose"
+target_pose_topic: "target_pose"
+target_joint_topic: "target_joint"
+current_joint_topic: "joint_states"
+current_twist_topic: "current_twist"
+publish_frequency: 50.0

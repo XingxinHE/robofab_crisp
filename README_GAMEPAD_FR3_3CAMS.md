@@ -1,5 +1,7 @@
 # FR3 + Gamepad + 3 Cameras Runbook
 
+See `README_WORKFLOWS.md` for normalized task aliases and config-composition conventions.
+
 Target setup:
 - Robot: FR3 at `172.16.0.3`
 - Teleop input: Xbox gamepad (single operator)
@@ -56,7 +58,7 @@ pixi run test-image-triple
 In `robofab_crisp`:
 
 ```bash
-pixi run gamepad-teleop-fr3-3cams -- --home-on-start
+pixi run teleop-gamepad-fr3-3cams -- --home-on-start
 ```
 
 ## 4) Record dataset (gamepad controls recording)
@@ -64,7 +66,7 @@ pixi run gamepad-teleop-fr3-3cams -- --home-on-start
 In `robofab_crisp`:
 
 ```bash
-pixi run record-fr3-gamepad-3cams -- \
+pixi run record-gamepad-fr3-3cams -- \
   --repo-id local/fr3_gamepad_3cams_open \
   --tasks "open the microwave" \
   --num-episodes 10
@@ -125,7 +127,7 @@ pixi run train-act -- \
 Before deploy, keep robot and three camera topics alive.
 
 ```bash
-pixi run deploy-act-3cams-gamepad -- \
+pixi run deploy-act-fr3-3cams-gamepad -- \
   --model-path outputs/train/<date>/<job>/checkpoints/last/pretrained_model \
   --repo-id local/fr3_gamepad_3cams_open_deploy \
   --num-episodes 1

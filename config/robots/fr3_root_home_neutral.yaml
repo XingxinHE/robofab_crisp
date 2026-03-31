@@ -1,0 +1,15 @@
+robot_type: "franka"
+home_config:
+  - 0
+  - -0.7853981633974483
+  - 0
+  - -2.356194490192345
+  - 0
+  - 1.5707963267948966
+  - 0.7853981633974483
+current_pose_topic: "current_pose"
+target_pose_topic: "target_pose"
+target_joint_topic: "target_joint"
+current_joint_topic: "joint_states"
+current_twist_topic: "current_twist"
+publish_frequency: 50.0
