@@ -14,4 +14,4 @@ The `scripts/` folder now contains only repository-wide utilities.
 - teleop/record: `teleoperations/{streamed,leader_follower,gamepad,viser}`
 - deploy: `deployment/act`
 
-Use `README_WORKFLOWS.md` for the canonical Pixi task surface.
+Use `runbooks/README.md` for the canonical Pixi task surface.

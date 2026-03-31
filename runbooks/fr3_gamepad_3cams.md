@@ -1,21 +1,16 @@
-# FR3 + Gamepad + 3 Cameras Runbook
-
-See `README_WORKFLOWS.md` for normalized task aliases and config-composition conventions.
+# FR3 + Gamepad + 3 Cameras
 
 Target setup:
-- Robot: FR3 at `172.16.0.3`
-- Teleop input: Xbox gamepad (single operator)
-- Cameras:
-  - `robot0_agentview_left`  -> serial `342522074350`
-  - `robot0_agentview_right` -> serial `347622071856`
-  - `robot0_eye_in_hand`     -> serial `336222070633`
+- robot: FR3 at `172.16.0.3`
+- teleop/record input: Xbox gamepad
+- cameras: `robot0_eye_in_hand`, `robot0_agentview_left`, `robot0_agentview_right`
 
-Dataset camera keys:
+Required dataset camera keys:
+- `observation.images.robot0_eye_in_hand`
 - `observation.images.robot0_agentview_left`
 - `observation.images.robot0_agentview_right`
-- `observation.images.robot0_eye_in_hand`
 
-## 1) Robot bringup (single FR3)
+## 1) Robot bringup (RT PC)
 
 In `module_run_on_RT_pc/pixi_franka_ros2`:
 
@@ -37,7 +32,7 @@ pixi run -e humble franka \
 pixi run -e humble ros2 control switch_controllers --activate cartesian_impedance_controller
 ```
 
-## 2) Camera bringup (three RealSense)
+## 2) Camera bringup (camera PC)
 
 In `pixi_realsense_ros2`:
 
@@ -46,14 +41,13 @@ In `pixi_realsense_ros2`:
 pixi run camera-triple
 ```
 
-Optional visual check:
+Optional check:
 
 ```bash
-# terminal 1
 pixi run test-image-triple
 ```
 
-## 3) Gamepad teleop sanity check
+## 3) Teleop sanity check (GPU/ops PC)
 
 In `robofab_crisp`:
 
@@ -61,9 +55,7 @@ In `robofab_crisp`:
 pixi run teleop-gamepad-fr3-3cams -- --home-on-start
 ```
 
-## 4) Record dataset (gamepad controls recording)
-
-In `robofab_crisp`:
+## 4) Record dataset
 
 ```bash
 pixi run record-gamepad-fr3-3cams -- \
@@ -72,61 +64,57 @@ pixi run record-gamepad-fr3-3cams -- \
   --num-episodes 10
 ```
 
-Gamepad recording mapping:
+Gamepad recording controls:
 - D-pad Up: record start/stop
 - D-pad Right: save
 - D-pad Left: delete
 - D-pad Down: exit
 
-Resume note:
-- `--num-episodes` is the total target, not "additional episodes".
-- Example: if dataset currently has 18 episodes, use `--resume --num-episodes 30` to add 12 more.
+Resume rule:
+- `--num-episodes` is the total target.
+- example: if dataset has 18 episodes, use `--resume --num-episodes 30` to add 12.
 
-If recording is interrupted (collision, power/network drop), run resume cleanup first:
+## 5) If recording was interrupted
 
 ```bash
 # dry run
 pixi run dataset-cleanup-resume -- \
   --repo-id local/fr3_gamepad_3cams_open
 
-# apply cleanup
+# apply
 pixi run dataset-cleanup-resume -- \
   --repo-id local/fr3_gamepad_3cams_open \
   --apply
 ```
 
-## 5) Validate the recorded dataset
+## 6) Validate dataset
 
 ```bash
 pixi run episode-stats -- --repo-id local/fr3_gamepad_3cams_open
 pixi run episode-video-info -- --repo-id local/fr3_gamepad_3cams_open --episode 0
 ```
 
-## 6) Train ACT
-
-Smoke run first:
+## 7) Train ACT
 
 ```bash
+# smoke
 pixi run train-act -- \
   --prepare-from local/fr3_gamepad_3cams_open \
   --repo-id local/fr3_gamepad_3cams_open_fix_feat \
   --smoke
-```
 
-Full run:
-
-```bash
+# full
 pixi run train-act -- \
   --repo-id local/fr3_gamepad_3cams_open_fix_feat \
   --steps 50000 \
   --batch-size 8
 ```
 
-## 7) Deploy ACT
-
-Before deploy, keep robot and three camera topics alive.
+## 8) Deploy ACT
 
 ```bash
+pixi run preflight-deploy-fr3-3cams-gamepad
+
 pixi run deploy-act-fr3-3cams-gamepad -- \
   --model-path outputs/train/<date>/<job>/checkpoints/last/pretrained_model \
   --repo-id local/fr3_gamepad_3cams_open_deploy \

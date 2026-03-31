@@ -6,4 +6,4 @@
 - `viser/`: direct Viser teleop workflows
 - `shared/`: shared teleop/recording/preflight helpers
 
-Use `README_WORKFLOWS.md` for normalized task aliases.
+Use `runbooks/README.md` for normalized task aliases.

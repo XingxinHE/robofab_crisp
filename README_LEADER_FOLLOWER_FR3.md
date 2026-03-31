@@ -1,8 +1,8 @@
 # FR3 Leader/Follower Runbook (Dual Robot, Same RT PC)
 
-See `README_WORKFLOWS.md` for normalized task aliases and config-composition conventions.
+See `runbooks/README.md` for normalized task aliases and config-composition conventions.
 
-For the 3-camera hardware setup, use `README_LEADER_FOLLOWER_FR3_3CAMS.md`.
+For the 3-camera hardware setup, use `runbooks/fr3_leader_follower_3cams.md`.
 
 This runbook uses two FR3 robots on the same RT PC:
 - leader: `left` namespace, IP `172.16.0.33`
