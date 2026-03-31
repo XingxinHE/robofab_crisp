@@ -13,7 +13,6 @@ import logging
 
 import numpy as np
 import rclpy
-from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 
 from enum import Enum
 
@@ -59,12 +58,14 @@ import crisp_gym  # noqa: F401
 # from crisp_gym.config.home import HomeConfig
 from crisp_gym.envs.manipulator_env import ManipulatorCartesianEnv, make_env
 from crisp_gym.envs.manipulator_env_config import list_env_configs
-from crisp_gym.record import recording_manager as _rm
 from crisp_gym.record.record_functions import make_teleop_fn, make_teleop_streamer_fn
 from crisp_gym.record.recording_manager import make_recording_manager
 from crisp_gym.teleop.teleop_robot import TeleopRobot, make_leader
 from crisp_gym.teleop.teleop_robot_config import list_leader_configs
 from crisp_gym.teleop.teleop_sensor_stream import TeleopStreamedPose
+from teleoperations.shared.ros_recording_shutdown import (
+    install_ros_recording_manager_shutdown_patch,
+)
 from crisp_gym.util import prompt
 from crisp_gym.util.lerobot_features import get_features
 from crisp_gym.util.setup_logger import setup_logging
@@ -73,30 +74,9 @@ from crisp_gym.util.setup_logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def _patched_spin_node(self) -> None:  # noqa: ANN001
-    executor = SingleThreadedExecutor()
-    executor.add_node(self.node)
-    try:
-        while rclpy.ok():
-            executor.spin_once(timeout_sec=0.1)
-    except (ExternalShutdownException, KeyboardInterrupt):
-        pass
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("ROSRecordingManager spin thread exited with exception: %s", exc)
-    finally:
-        try:
-            executor.remove_node(self.node)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            self.node.destroy_node()
-        except Exception:  # noqa: BLE001
-            pass
-
-
 def main():
     """Record data in Lerobot Format using a leader-follower teleoperation setup."""
-    _rm.ROSRecordingManager._spin_node = _patched_spin_node
+    install_ros_recording_manager_shutdown_patch(logger)
 
     parser = argparse.ArgumentParser(description="Record data in Lerobot Format")
     parser.add_argument(

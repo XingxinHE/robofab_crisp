@@ -70,6 +70,10 @@ Gamepad recording controls:
 - D-pad Left: delete
 - D-pad Down: exit
 
+Note:
+- older versions could print a noisy `ExternalShutdownException` traceback at shutdown;
+  current recorder patch handles this gracefully.
+
 Resume rule:
 - `--num-episodes` is the total target.
 - example: if dataset has 18 episodes, use `--resume --num-episodes 30` to add 12.

@@ -16,6 +16,7 @@ import threading
 import time
 
 import numpy as np
+import rclpy
 from scipy.spatial.transform import Rotation
 from std_msgs.msg import String
 
@@ -69,6 +70,9 @@ from teleoperations.shared.direct_recording_common import (
     DirectTeleopDataFn,
     TeleopState,
     get_existing_total_episodes,
+)
+from teleoperations.shared.ros_recording_shutdown import (
+    install_ros_recording_manager_shutdown_patch,
 )
 from teleoperations.gamepad.gamepad_6dof_interface import (
     Gamepad6DofConfig,
@@ -136,6 +140,7 @@ def main() -> int:
     args = parse_args()
     setup_logging(level=args.log_level)
     logger = logging.getLogger(__name__)
+    install_ros_recording_manager_shutdown_patch(logger)
 
     logger.info("Arguments:")
     for arg, value in vars(args).items():
@@ -407,6 +412,8 @@ def main() -> int:
                 env.close()
             except Exception:
                 pass
+        if rclpy.ok():
+            rclpy.shutdown()
 
     return 0
 

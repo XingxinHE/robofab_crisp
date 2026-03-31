@@ -18,6 +18,9 @@ from teleoperations.shared.direct_recording_common import (
     TeleopState,
     get_existing_total_episodes,
 )
+from teleoperations.shared.ros_recording_shutdown import (
+    install_ros_recording_manager_shutdown_patch,
+)
 from robot_descriptions.loaders.yourdfpy import load_robot_description
 from scipy.spatial.transform import Rotation
 from viser.extras import ViserUrdf
@@ -89,6 +92,7 @@ def main() -> None:
 
     logger = logging.getLogger(__name__)
     setup_logging(level=args.log_level)
+    install_ros_recording_manager_shutdown_patch(logger)
 
     logger.info("Arguments:")
     for arg, value in vars(args).items():
