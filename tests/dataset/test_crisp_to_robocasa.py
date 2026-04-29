@@ -196,6 +196,10 @@ def test_convert_frame_dict_preserves_nonconverted_fields() -> None:
     assert np.allclose(out["index"], frame["index"])
     assert np.allclose(out["task_index"], frame["task_index"])
     assert out["task"] == frame["task"]
+    assert out["annotation.human.task_description"] == 0
+    assert out["annotation.human.task_name"] == 1
+    assert out["next.reward"] == 0.0
+    assert out["next.done"] is False
 
 
 def test_convert_frame_dict_rewrites_state_and_action_only() -> None:
@@ -238,6 +242,21 @@ def test_build_robocasa_like_features_shapes_and_dtypes() -> None:
     assert features["observation.state"]["dtype"] == "float64"
     assert features["action"]["dtype"] == "float64"
     assert features["observation.images.robot0_eye_in_hand"]["dtype"] == "video"
+    assert features["observation.images.robot0_eye_in_hand"]["names"] == ["height", "width", "channel"]
+    assert len(features["observation.state"]["names"]) == 16
+    assert features["observation.state"]["names"][0] == "base_position.x"
+    assert features["observation.state"]["names"][-1] == "gripper_qpos[1]"
+    assert len(features["action"]["names"]) == 12
+    assert features["action"]["names"][0] == "base_motion.x"
+    assert features["action"]["names"][-1] == "gripper_close"
+    assert "annotation.human.task_description" in features
+    assert features["annotation.human.task_description"]["dtype"] == "int64"
+    assert "annotation.human.task_name" in features
+    assert features["annotation.human.task_name"]["dtype"] == "int64"
+    assert "next.reward" in features
+    assert features["next.reward"]["dtype"] == "float32"
+    assert "next.done" in features
+    assert features["next.done"]["dtype"] == "bool"
 
 
 def test_convert_info_contains_expected_sections() -> None:
@@ -328,6 +347,8 @@ def test_integration_convert_dataset_and_validate_schema_contract(
     assert out_info["features"]["action"]["shape"] == [12]
     assert out_info["features"]["observation.state"]["dtype"] == "float64"
     assert out_info["features"]["action"]["dtype"] == "float64"
+    assert len(out_info["features"]["observation.state"]["names"]) == 16
+    assert len(out_info["features"]["action"]["names"]) == 12
 
     # Ensure converted row payload matches expected schema dimensions.
     import pyarrow.parquet as pq
@@ -340,3 +361,17 @@ def test_integration_convert_dataset_and_validate_schema_contract(
 
     assert len(rows["observation.state"][0]) == 16
     assert len(rows["action"][0]) == 12
+
+    # CRISP-only columns must not be present
+    for dropped in ("observation.state.cartesian", "observation.state.gripper", "observation.state.joints", "observation.state.target"):
+        assert dropped not in table.column_names
+
+    # New RoboCasa columns must be present
+    for added in ("annotation.human.task_description", "annotation.human.task_name", "next.reward", "next.done"):
+        assert added in table.column_names
+
+    # Meta files
+    assert (out_root / "meta" / "embodiment.json").exists()
+    assert (out_root / "meta" / "stats.json").exists()
+    assert not (out_root / "meta" / "crisp_meta.json").exists()
+    assert not (out_root / "meta" / "episodes_stats.jsonl").exists()

@@ -85,6 +85,7 @@ Conversion formulas:
 Tests are defined in:
 
 - `tests/dataset/test_crisp_to_robocasa.py`
+- `tests/dataset/test_crisp_to_robocasa_modality_and_annotation.py`
 
 They cover:
 
@@ -96,6 +97,14 @@ They cover:
 - metadata conversion contract checks
 - local fixture checks using:
   - `/home/hex/.cache/huggingface/lerobot/local/fr3_gamepad_3cams_open_new_schema`
+
+Additional handoff tests cover the next implementation slice:
+
+- loading task text from `meta/tasks.jsonl`
+- generating `meta/modality.json` in RoboCasa-style format
+- adding parquet column `annotation.human.task_description`
+
+These tests are currently marked `xfail` until implementation is completed.
 
 Run tests with:
 

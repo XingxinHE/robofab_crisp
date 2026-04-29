@@ -64,6 +64,9 @@ pixi run record-gamepad-fr3-3cams -- \
   --num-episodes 10
 ```
 
+This wrapper enforces `--fps 20` for the current collection baseline.
+Video codec remains CRISP/LeRobot default (`av1`) for now.
+
 Gamepad recording controls:
 - D-pad Up: record start/stop
 - D-pad Right: save

@@ -1,7 +1,7 @@
 {
   "mode": "client",
   "connect": {
-    "endpoints": ["tcp/172.16.0.100:7447"]
+    "endpoints": ["tcp/172.16.0.98:7447"]
   },
   "timestamping": {
     "enabled": true

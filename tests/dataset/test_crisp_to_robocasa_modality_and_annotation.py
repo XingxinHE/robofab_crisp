@@ -9,11 +9,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import numpy as np
+
 from dataset.crisp_to_robocasa import (  # noqa: E402
     ConversionConfig,
     build_robocasa_like_modality,
     convert_crisp_dataset_to_robocasa_like,
     convert_crisp_info_to_robocasa_like_info,
+    convert_frame_dict,
     inject_annotation_into_frame,
     load_task_index_to_description,
     write_robocasa_like_modality,
@@ -103,6 +106,19 @@ def test_inject_annotation_into_frame_uses_task_index_lookup() -> None:
     assert out["annotation.human.task_description"] == "open the microwave"
 
 
+def test_convert_frame_dict_injects_robocasa_exact_annotations() -> None:
+    frame = {
+        "task_index": np.array([2], dtype=np.int64),
+        "observation.state": [0.0] * 20,
+        "action": [0.0] * 7,
+    }
+    out = convert_frame_dict(frame, CFG)
+    assert out["annotation.human.task_description"] == 2
+    assert out["annotation.human.task_name"] == 1
+    assert out["next.reward"] == 0.0
+    assert out["next.done"] is False
+
+
 def test_converted_info_contains_annotation_feature() -> None:
     info_path = Path(
         "/home/hex/.cache/huggingface/lerobot/local/fr3_gamepad_3cams_open_new_schema/meta/info.json"
@@ -112,6 +128,13 @@ def test_converted_info_contains_annotation_feature() -> None:
     info = json.loads(info_path.read_text())
     out = convert_crisp_info_to_robocasa_like_info(info, CFG)
     assert "annotation.human.task_description" in out["features"]
+    assert out["features"]["annotation.human.task_description"]["dtype"] == "int64"
+    assert "annotation.human.task_name" in out["features"]
+    assert out["features"]["annotation.human.task_name"]["dtype"] == "int64"
+    assert "next.reward" in out["features"]
+    assert out["features"]["next.reward"]["dtype"] == "float32"
+    assert "next.done" in out["features"]
+    assert out["features"]["next.done"]["dtype"] == "bool"
 
 
 def test_integration_converted_dataset_contains_annotation_column(
@@ -129,6 +152,14 @@ def test_integration_converted_dataset_contains_annotation_column(
     assert parquet_path.exists()
     table = pq.read_table(parquet_path)
     assert "annotation.human.task_description" in table.column_names
+    rows = table.to_pydict()
+    assert isinstance(rows["annotation.human.task_description"][0], int)
+    assert "annotation.human.task_name" in table.column_names
+    assert isinstance(rows["annotation.human.task_name"][0], int)
+    assert "next.reward" in table.column_names
+    assert isinstance(rows["next.reward"][0], float)
+    assert "next.done" in table.column_names
+    assert isinstance(rows["next.done"][0], bool)
 
 
 def test_integration_converted_dataset_writes_modality_json(tmp_path: Path) -> None:

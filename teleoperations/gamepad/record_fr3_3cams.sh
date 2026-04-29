@@ -16,7 +16,7 @@ Always enforced:
   --follower-config fr3_3cams_gamepad_recording
   --follower-namespace ""
   --recording-manager-type ros
-  --fps 15
+  --fps 20
   --no-push-to-hub
 
 Gamepad recording controls:
@@ -32,6 +32,6 @@ exec python -m teleoperations.gamepad.record \
   --follower-config fr3_3cams_gamepad_recording \
   --follower-namespace "" \
   --recording-manager-type ros \
-  --fps 15 \
+  --fps 20 \
   --no-push-to-hub \
   "$@"

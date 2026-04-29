@@ -15,7 +15,7 @@ CRISP_CONFIG_PATH="./config"
 preflight-recording-fr3 = "python -m teleoperations.streamed.preflight"
 teleop-streamed-web = "python -m teleoperations.streamed.web_teleop"
 teleop-leader-follower-fr3 = "python -m teleoperations.leader_follower.teleop"
-teleop-gamepad-fr3 = "python -m teleoperations.gamepad.teleop"
+teleop-gamepad-fr3 = "bash teleoperations/gamepad/teleop_fr3.sh"
 teleop-gamepad-fr3-3cams = "bash teleoperations/gamepad/teleop_fr3_3cams.sh"
 record-streamed-fr3 = "bash teleoperations/streamed/record_fr3.sh"
 record-leader-follower-fr3 = "bash teleoperations/leader_follower/record_profiled.sh --profile-name record-leader-follower-fr3 --follower-config fr3_right_leader_follower_recording --recording-manager-type keyboard --buttons-hint 0"
@@ -58,6 +58,7 @@ cmake = "*"
 pkg-config = "*"
 make = "*"
 ninja = "*"
+ros-humble-rqt-gui = ">=1.1.7,<2"
 
 [pypi-dependencies]
 crisp-gym = { git = "https://github.com/utiasDSL/crisp_gym.git", rev = "main" }
