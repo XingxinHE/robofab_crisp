@@ -113,7 +113,6 @@ def main() -> int:
     running = True
     last_mode = gamepad.coarse_mode
     last_rp = gamepad.roll_pitch_enabled
-    last_log = time.time()
 
     while running:
         frame_start = time.time()
@@ -149,16 +148,6 @@ def main() -> int:
             dtype=np.float32,
         )
         env.step(action, block=False)
-
-        now = time.time()
-        if now - last_log > args.log_every:
-            last_log = now
-            print(
-                f"dxyz=({cmd.dx:+.4f},{cmd.dy:+.4f},{cmd.dz:+.4f}) "
-                f"dRPY=({cmd.roll:+.3f},{cmd.pitch:+.3f},{cmd.yaw:+.3f}) "
-                f"mode={'coarse' if cmd.coarse_mode else 'fine'} rp={'on' if cmd.roll_pitch_enabled else 'off'} "
-                f"gripper={'open' if gripper_target > 0.5 else 'close'}"
-            )
 
         elapsed = time.time() - frame_start
         sleep_t = dt - elapsed

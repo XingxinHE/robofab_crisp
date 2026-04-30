@@ -15,6 +15,8 @@ This module is for direct Xbox gamepad teleoperation/recording on a single FR3.
 
 pixi run teleop-gamepad-fr3-3cams -- --home-config robots/fr3_root_home_year2.yaml
 
+pixi run record-gamepad-fr3-3cams -- --repo-id <repo_id> --home-config robots/fr3_root_home_year2.yaml --after-teleop robots/fr3_root_home_year2.yaml
+
 ## D-pad recording controls
 
 - Up: record start/stop

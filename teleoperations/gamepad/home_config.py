@@ -60,10 +60,14 @@ def _validate_home_config(
     return values.tolist()
 
 
-def _load_home_config_from_yaml(config_name: str) -> list[float]:
+def _load_home_config_from_yaml(config_name: str, config_key: str | None = None) -> list[float]:
     config_path = _resolve_home_config_path(config_name)
     with open(config_path, "r") as f:
         data = yaml.safe_load(f) or {}
+
+    # If a specific key is requested, try it first
+    if config_key is not None and config_key in data:
+        return list(data[config_key])
 
     for key in (
         "home_config",
@@ -81,12 +85,13 @@ def get_gamepad_home_config(
     env: ManipulatorCartesianEnv,
     config_name: str | None = None,
     noise: float = 0.0,
+    config_key: str | None = None,
 ) -> list[float]:
     """Return the selected home config, optionally randomized in joint space."""
     expected_joints = len(env.robot.config.joint_names)
     source = config_name or "environment robot_config.home_config"
     home_config = (
-        _load_home_config_from_yaml(config_name)
+        _load_home_config_from_yaml(config_name, config_key=config_key)
         if config_name
         else list(env.robot.config.home_config)
     )

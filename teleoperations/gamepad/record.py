@@ -74,6 +74,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--home-config-noise", type=float, default=0.0)
+    parser.add_argument(
+        "--after-teleop",
+        type=str,
+        default=None,
+        help=(
+            "Optional robot YAML/home config for the final homing after recording. "
+            "If omitted, falls back to --home-config."
+        ),
+    )
 
     # Gamepad and teleop tuning
     parser.add_argument("--controller-index", type=int, default=0)
@@ -238,7 +247,6 @@ def main() -> int:
             dt = 1.0 / max(args.teleop_rate_hz, 1.0)
             last_mode = gamepad.coarse_mode
             last_rp = gamepad.roll_pitch_enabled
-            last_log = time.time()
 
             while running.is_set():
                 frame_start = time.time()
@@ -295,22 +303,6 @@ def main() -> int:
                     env.gripper.set_target(target_gripper)
                     with teleop_state.lock:
                         teleop_state.last_applied_gripper = target_gripper
-
-                now = time.time()
-                if now - last_log > args.log_every:
-                    last_log = now
-                    logger.info(
-                        "dxyz=(%+.4f,%+.4f,%+.4f) dRPY=(%+.3f,%+.3f,%+.3f) mode=%s rp=%s gripper=%s",
-                        cmd.dx,
-                        cmd.dy,
-                        cmd.dz,
-                        cmd.roll,
-                        cmd.pitch,
-                        cmd.yaw,
-                        "coarse" if cmd.coarse_mode else "fine",
-                        "on" if cmd.roll_pitch_enabled else "off",
-                        "open" if target_gripper > 0.5 else "close",
-                    )
 
                 elapsed = time.time() - frame_start
                 sleep_t = dt - elapsed
@@ -369,7 +361,16 @@ def main() -> int:
                 )
 
         logger.info("Homing follower.")
-        env.home()
+        after_teleop_source = (
+            args.after_teleop if args.after_teleop is not None else args.home_config
+        )
+        final_home = get_gamepad_home_config(
+            env,
+            after_teleop_source,
+            args.home_config_noise,
+            config_key="after_teleop" if args.after_teleop is not None else None,
+        )
+        env.home(home_config=final_home)
         logger.info("Finished recording.")
 
     except TimeoutError as exc:
