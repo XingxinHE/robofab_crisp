@@ -20,45 +20,6 @@ import rclpy
 from scipy.spatial.transform import Rotation
 from std_msgs.msg import String
 
-from enum import Enum
-
-home_close_to_table = [
-    -0.02312892,
-    -0.10664185,
-    -0.0195703,
-    -1.75644521,
-    -0.00732298,
-    1.68992915,
-    0.8040582,
-]
-
-home_front_up = [
-    -0.02312892,
-    -0.10664185,
-    -0.0195703,
-    -1.75644521,
-    -0.00732298,
-    1.68992915,
-    0.8040582,
-]
-
-
-class HomeConfig(Enum):
-    """Enum for different home configurations."""
-
-    CLOSE_TO_TABLE = home_close_to_table
-    FRONT_UP = home_front_up
-
-    def randomize(self, noise: float = 0.01) -> list:
-        """Randomize the home configuration."""
-        import numpy as np
-
-        return (
-            np.array(self.value)
-            + np.random.uniform(-noise, noise, size=len(self.value))
-        ).tolist()
-
-
 from crisp_gym.envs.manipulator_env import ManipulatorCartesianEnv, make_env
 from crisp_gym.envs.manipulator_env_config import list_env_configs
 from crisp_gym.record.recording_manager import make_recording_manager
@@ -78,6 +39,7 @@ from teleoperations.gamepad.gamepad_6dof_interface import (
     Gamepad6DofConfig,
     XboxGamepad6Dof,
 )
+from teleoperations.gamepad.home_config import get_gamepad_home_config
 
 
 def parse_args() -> argparse.Namespace:
@@ -101,6 +63,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follower-config", type=str, default=None)
     parser.add_argument("--follower-namespace", type=str, default="")
     parser.add_argument("--log-level", type=str, default="INFO")
+    parser.add_argument(
+        "--home-config",
+        type=str,
+        default=None,
+        help=(
+            "Optional robot YAML/home config override. Accepts names such as "
+            "'fr3_root_home_lab', 'robots/fr3_root_home_lab.yaml', "
+            "'homes/table_a.yaml', or a file path."
+        ),
+    )
     parser.add_argument("--home-config-noise", type=float, default=0.0)
 
     # Gamepad and teleop tuning
@@ -188,8 +160,8 @@ def main() -> int:
 
         env.wait_until_ready()
         env.home(
-            home_config=HomeConfig.CLOSE_TO_TABLE.randomize(
-                noise=args.home_config_noise
+            home_config=get_gamepad_home_config(
+                env, args.home_config, args.home_config_noise
             )
         )
         env.reset()
@@ -363,8 +335,8 @@ def main() -> int:
 
         def on_end() -> None:
             env.robot.reset_targets()
-            random_home = HomeConfig.CLOSE_TO_TABLE.randomize(
-                noise=args.home_config_noise
+            random_home = get_gamepad_home_config(
+                env, args.home_config, args.home_config_noise
             )
             env.robot.home(blocking=False, home_config=random_home)
             env.gripper.open()

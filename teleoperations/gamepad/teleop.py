@@ -20,6 +20,7 @@ from teleoperations.gamepad.gamepad_6dof_interface import (
     Gamepad6DofConfig,
     XboxGamepad6Dof,
 )
+from teleoperations.gamepad.home_config import get_gamepad_home_config
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +37,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--home-on-start", action=argparse.BooleanOptionalAction, default=True
     )
+    parser.add_argument(
+        "--home-config",
+        type=str,
+        default=None,
+        help=(
+            "Optional robot YAML/home config override. Accepts names such as "
+            "'fr3_root_home_lab', 'robots/fr3_root_home_lab.yaml', "
+            "'homes/table_a.yaml', or a file path."
+        ),
+    )
+    parser.add_argument("--home-config-noise", type=float, default=0.0)
     parser.add_argument("--log-every", type=float, default=1.5)
     argv = sys.argv[1:]
     if argv and argv[0] == "--":
@@ -86,8 +98,11 @@ def main() -> int:
     assert isinstance(env, ManipulatorCartesianEnv)
 
     env.wait_until_ready()
+    home_config = get_gamepad_home_config(
+        env, args.home_config, args.home_config_noise
+    )
     if args.home_on_start:
-        env.home()
+        env.home(home_config=home_config)
     env.reset()
 
     # Start open for safer teleop behavior.
@@ -152,7 +167,7 @@ def main() -> int:
 
     print("Stopping teleop, homing robot...")
     try:
-        env.home()
+        env.home(home_config=home_config)
     finally:
         env.close()
         gamepad.stop()
