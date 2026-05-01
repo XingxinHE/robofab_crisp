@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "${PREPARE_FROM}" ]]; then
-  python "${SCRIPT_DIR}/clone_dataset_fix_features.py" \
+  python "${SCRIPT_DIR}/../dataset/00_crisp_to_lerobot_compatible.py" \
     --src-repo-id "${PREPARE_FROM}" \
     --dst-repo-id "${DATASET_REPO_ID}"
 fi

@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Clone a local LeRobot dataset and remove duplicated sub-state feature entries.
+"""Make a CRISP LeRobot dataset compatible with standard ACT training.
 
-This keeps the original dataset untouched for future recording, while preparing
-the cloned dataset for ACT training (avoids 20x6 state projection mismatch).
+CRISP datasets contain redundant sub-state feature entries
+(observation.state.cartesian, observation.state.gripper,
+observation.state.joints, observation.state.target) alongside the full
+observation.state vector.  LeRobot's ACT policy sees the sub-state keys
+first and builds a state-projection layer with the wrong dimension,
+which causes a matmul-shape mismatch at training time.
+
+This script clones the source dataset and strips the redundant keys
+from meta/info.json so that only observation.state (20-D) remains.
+The original dataset is kept untouched for future recording.
 """
 
 from __future__ import annotations

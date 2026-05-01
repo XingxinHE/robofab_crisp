@@ -1,3 +1,16 @@
+# Dataset Utility Module
+
+The dataset collected from Crisp containing redundant metadata. Use the following to remove it.
+
+```shell
+pixi run python dataset/00_crisp_to_lerobot_compatible.py \
+  --src-repo-id local/with_tray_combined \         # crisp controller collected dataset
+  --dst-repo-id local/with_tray_combined_fix_feat  # duplicate dataset and fix it
+```
+
+
+
+
 # Dataset Conversion Module
 
 This folder hosts conversion code to transform CRISP real-robot datasets into a RoboCasa-like schema for co-training.
