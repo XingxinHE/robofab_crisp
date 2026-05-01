@@ -70,6 +70,8 @@ Defaults:
   --env-namespace ${ENV_NAMESPACE:-<root>}
   --recording-manager-type keyboard
   --fps 15
+  --home-config <name-or-path>        Optional robot YAML or homes/*.yaml for deployment homing
+  --after-teleop <name-or-path>       Optional final home after all deployment episodes
 EOF
   exit 0
 fi
@@ -187,7 +189,7 @@ echo "[${PROFILE_NAME}] Using env config: ${ENV_CONFIG}"
 echo "[${PROFILE_NAME}] Using env namespace: ${ENV_NAMESPACE:-<root>}"
 echo "[${PROFILE_NAME}] Recording deployment episodes to repo: ${REPO_ID}"
 
-exec python -m crisp_gym.scripts.deploy_policy \
+exec python -m deployment.act.deploy_policy \
   --repo-id "${REPO_ID}" \
   --num-episodes "${NUM_EPISODES}" \
   --fps 15 \

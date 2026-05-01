@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 from crisp_gym.config.path import find_config
-from crisp_gym.envs.manipulator_env import ManipulatorCartesianEnv
+from crisp_gym.envs.manipulator_env import ManipulatorBaseEnv
 from crisp_py.robot.robot_config import RobotConfig
 
 
@@ -60,7 +60,9 @@ def _validate_home_config(
     return values.tolist()
 
 
-def _load_home_config_from_yaml(config_name: str, config_key: str | None = None) -> list[float]:
+def _load_home_config_from_yaml(
+    config_name: str, config_key: str | None = None
+) -> list[float]:
     config_path = _resolve_home_config_path(config_name)
     with open(config_path, "r") as f:
         data = yaml.safe_load(f) or {}
@@ -82,7 +84,7 @@ def _load_home_config_from_yaml(config_name: str, config_key: str | None = None)
 
 
 def get_gamepad_home_config(
-    env: ManipulatorCartesianEnv,
+    env: ManipulatorBaseEnv,
     config_name: str | None = None,
     noise: float = 0.0,
     config_key: str | None = None,
