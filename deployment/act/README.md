@@ -13,3 +13,15 @@ Canonical tasks:
 - `deploy-act-fr3`
 - `deploy-act-fr3-3cams`
 - `deploy-act-fr3-3cams-gamepad`
+
+# Commands
+
+Step 1: Preflight (verify robot is ready)
+```
+pixi run preflight-deploy-fr3-3cams
+```
+
+Step 2: Deploy
+```
+pixi run deploy-act-fr3-3cams -- --repo-id local/with_tray_combined_fix_feat_deploy --num-episodes 5 --model-path outputs/train/2026-05-01/15-34-21_act/checkpoints/001000/pretrained_model
+```
