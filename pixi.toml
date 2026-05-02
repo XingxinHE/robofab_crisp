@@ -61,8 +61,11 @@ ninja = "*"
 ros-humble-rqt-gui = ">=1.1.7,<2"
 
 [pypi-dependencies]
+torch = { version = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" }
+torchvision = { version = "==0.23.0", index = "https://download.pytorch.org/whl/cu128" }
+transformers = ">=4.50.3"
 crisp-gym = { git = "https://github.com/utiasDSL/crisp_gym.git", rev = "main" }
-lerobot = { git = "https://github.com/huggingface/lerobot", rev = "dacd1d7f5c719c3e56d7b7154a751bef6d5bd23c", extras = ["smolvla"] }
+lerobot = { git = "https://github.com/huggingface/lerobot", rev = "dacd1d7f5c719c3e56d7b7154a751bef6d5bd23c", extras = ["smolvla", "pi0"] }
 tyro = "*"
 viser = ">=1.0.24, <2"
 robot-descriptions = ">=1.23.0, <2"
