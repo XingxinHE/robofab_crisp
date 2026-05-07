@@ -102,24 +102,24 @@ def test_crisp_delta_rpy_to_rotvec_nontrivial() -> None:
     assert np.allclose(rv, expected, atol=1e-8)
 
 
-def test_gripper_state_normalized_open_maps_to_full_width() -> None:
-    width = crisp_gripper_state_to_width_m(1.0, CFG.gripper)
+def test_gripper_state_open_closedness_zero_maps_to_full_width() -> None:
+    width = crisp_gripper_state_to_width_m(0.0, CFG.gripper)
     assert width == pytest.approx(0.08)
 
 
-def test_gripper_state_normalized_closed_maps_to_zero_width() -> None:
-    width = crisp_gripper_state_to_width_m(0.0, CFG.gripper)
+def test_gripper_state_closed_closedness_one_maps_to_zero_width() -> None:
+    width = crisp_gripper_state_to_width_m(1.0, CFG.gripper)
     assert width == pytest.approx(0.0)
 
 
 def test_gripper_state_to_robocasa_qpos_open() -> None:
-    qpos = crisp_gripper_state_to_robocasa_qpos(1.0, CFG.gripper)
+    qpos = crisp_gripper_state_to_robocasa_qpos(0.0, CFG.gripper)
     assert qpos.shape == (2,)
     assert np.allclose(qpos, np.array([0.04, -0.04]))
 
 
 def test_gripper_state_to_robocasa_qpos_closed() -> None:
-    qpos = crisp_gripper_state_to_robocasa_qpos(0.0, CFG.gripper)
+    qpos = crisp_gripper_state_to_robocasa_qpos(1.0, CFG.gripper)
     assert qpos.shape == (2,)
     assert np.allclose(qpos, np.array([0.0, 0.0]))
 
@@ -243,6 +243,14 @@ def test_build_robocasa_like_features_shapes_and_dtypes() -> None:
     assert features["action"]["dtype"] == "float64"
     assert features["observation.images.robot0_eye_in_hand"]["dtype"] == "video"
     assert features["observation.images.robot0_eye_in_hand"]["names"] == ["height", "width", "channel"]
+    assert (
+        features["observation.images.robot0_eye_in_hand"]["video_info"]["video.codec"]
+        == "h264"
+    )
+    assert (
+        features["observation.images.robot0_eye_in_hand"]["video_info"]["video.fps"]
+        == 20
+    )
     assert len(features["observation.state"]["names"]) == 16
     assert features["observation.state"]["names"][0] == "base_position.x"
     assert features["observation.state"]["names"][-1] == "gripper_qpos[1]"
@@ -284,6 +292,8 @@ def test_convert_info_contains_expected_sections() -> None:
 
     out = convert_crisp_info_to_robocasa_like_info(crisp_info, CFG)
     assert "features" in out
+    assert out["robot_type"] == "PandaOmron"
+    assert out["fps"] == 20
     assert "observation.state" in out["features"]
     assert "action" in out["features"]
 
@@ -347,6 +357,7 @@ def test_integration_convert_dataset_and_validate_schema_contract(
     assert out_info["features"]["action"]["shape"] == [12]
     assert out_info["features"]["observation.state"]["dtype"] == "float64"
     assert out_info["features"]["action"]["dtype"] == "float64"
+    assert out_info["robot_type"] == "PandaOmron"
     assert len(out_info["features"]["observation.state"]["names"]) == 16
     assert len(out_info["features"]["action"]["names"]) == 12
 
@@ -369,6 +380,21 @@ def test_integration_convert_dataset_and_validate_schema_contract(
     # New RoboCasa columns must be present
     for added in ("annotation.human.task_description", "annotation.human.task_name", "next.reward", "next.done"):
         assert added in table.column_names
+
+    assert rows["next.done"][-1] is True
+    assert rows["next.reward"][-1] == pytest.approx(1.0)
+
+    metadata = table.schema.metadata or {}
+    assert b"huggingface" in metadata
+    hf_meta = json.loads(metadata[b"huggingface"])
+    hf_features = hf_meta["info"]["features"]
+    for dropped in (
+        "observation.state.cartesian",
+        "observation.state.gripper",
+        "observation.state.joints",
+        "observation.state.target",
+    ):
+        assert dropped not in hf_features
 
     # Meta files
     assert (out_root / "meta" / "embodiment.json").exists()

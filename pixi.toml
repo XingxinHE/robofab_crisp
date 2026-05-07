@@ -35,6 +35,7 @@ preflight-deploy-fr3-3cams-gamepad = "python -m deployment.act.preflight_fr3_3ca
 deploy-act-fr3 = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3 --default-repo-id local/fr3_dualcam_streamed_deploy --preflight-module deployment.act.preflight_fr3 --env-namespace \"\" --use-namespace-arg 0 --forbid-env-namespace-arg 0"
 deploy-act-fr3-3cams = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams --default-repo-id local/fr3_leader_follower_3cams_open_deploy --preflight-module deployment.act.preflight_fr3_3cams --env-namespace right --use-namespace-arg 1 --forbid-env-namespace-arg 0"
 deploy-act-fr3-3cams-gamepad = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams-gamepad --default-repo-id local/fr3_gamepad_3cams_deploy --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1"
+deploy-pi0-fr3-3cams-gamepad = "bash deployment/pi0/deploy_profiled.sh --profile-name deploy-pi0-fr3-3cams-gamepad --default-repo-id local/fr3_pi0_3cams_gamepad_deploy --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1"
 episode-stats = "python analysis/episode_stats.py"
 episode-video-info = "python analysis/episode_video_info.py"
 gripper-align-check = "python analysis/gripper_alignment_check.py"

@@ -24,6 +24,14 @@ class Args:
     )
     output_state_dtype: str = "float64"
     output_action_dtype: str = "float64"
+    output_robot_type: str = "PandaOmron"
+    output_video_codec: str = "h264"
+    output_video_pix_fmt: str = "yuv420p"
+    output_video_fps: float | None = None
+    transcode_videos: bool = True
+    task_name: str | None = None
+    mark_terminal_done: bool = True
+    terminal_reward: float = 1.0
 
 
 def main(args: Args) -> None:
@@ -33,6 +41,14 @@ def main(args: Args) -> None:
         cfg=ConversionConfig(
             output_state_dtype=args.output_state_dtype,
             output_action_dtype=args.output_action_dtype,
+            output_robot_type=args.output_robot_type,
+            output_video_codec=args.output_video_codec,
+            output_video_pix_fmt=args.output_video_pix_fmt,
+            output_video_fps=args.output_video_fps,
+            transcode_videos=args.transcode_videos,
+            task_name=args.task_name,
+            mark_terminal_done=args.mark_terminal_done,
+            terminal_reward=args.terminal_reward,
         ),
     )
     print(f"Converted dataset written to: {out}")

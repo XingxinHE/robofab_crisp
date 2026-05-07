@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -28,14 +29,18 @@ class RoboCasaSchema:
 class GripperConversionConfig:
     """Locked assumption for current CRISP gamepad workflow.
 
-    - CRISP gripper state/action is normalized in [0, 1]
-    - 1.0 means fully open, 0.0 means fully closed
+    - CRISP gripper state is normalized closedness in [0, 1]
+    - CRISP gripper action is normalized in [0, 1]
+    - State 0.0 means fully open, 1.0 means fully closed
+    - Action 1.0 means fully open, 0.0 means fully closed
     - RoboCasa gripper_close convention is +1 close, -1 open
     """
 
     crisp_gripper_is_normalized: bool = True
     max_width_m: float = 0.08
     close_threshold: float = 0.5
+    clip_normalized: bool = True
+    crisp_state_open_value_high: bool = False
     crisp_open_value_high: bool = True
 
 
@@ -44,6 +49,15 @@ class ConversionConfig:
     gripper: GripperConversionConfig = GripperConversionConfig()
     output_state_dtype: str = "float64"
     output_action_dtype: str = "float64"
+    output_robot_type: str = "PandaOmron"
+    output_video_codec: str = "h264"
+    output_video_pix_fmt: str = "yuv420p"
+    output_video_fps: float | None = None
+    transcode_videos: bool = True
+    task_name_index: int = 1
+    task_name: str | None = None
+    mark_terminal_done: bool = True
+    terminal_reward: float = 1.0
 
 
 def validate_crisp_state_vector(state: np.ndarray) -> None:
@@ -78,7 +92,14 @@ def crisp_gripper_state_to_width_m(
 ) -> float:
     """Convert CRISP gripper state value to physical jaw width in meters."""
     if cfg.crisp_gripper_is_normalized:
-        return float(crisp_gripper_value) * cfg.max_width_m
+        open_fraction = (
+            float(crisp_gripper_value)
+            if cfg.crisp_state_open_value_high
+            else 1.0 - float(crisp_gripper_value)
+        )
+        if cfg.clip_normalized:
+            open_fraction = float(np.clip(open_fraction, 0.0, 1.0))
+        return open_fraction * cfg.max_width_m
     return float(crisp_gripper_value)
 
 
@@ -174,7 +195,7 @@ def convert_frame_dict(
     else:
         task_idx = 0
     out["annotation.human.task_description"] = task_idx
-    out["annotation.human.task_name"] = 1
+    out["annotation.human.task_name"] = cfg.task_name_index
     out["next.reward"] = 0.0
     out["next.done"] = False
 
@@ -238,6 +259,85 @@ _ROBOCASA_PARQUET_COLUMN_ORDER = [
 ]
 
 
+def _json_number(value: float) -> float | int:
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def _output_video_fps(
+    crisp_info: dict[str, Any],
+    cfg: ConversionConfig = ConversionConfig(),
+) -> float | int:
+    fps = cfg.output_video_fps
+    if fps is None:
+        fps = crisp_info.get("fps", 20)
+    return _json_number(float(fps))
+
+
+def _output_video_codec(feat: dict[str, Any], cfg: ConversionConfig) -> str:
+    if cfg.transcode_videos:
+        return cfg.output_video_codec
+    return (
+        feat.get("video_info", {}).get("video.codec")
+        or feat.get("info", {}).get("video.codec")
+        or cfg.output_video_codec
+    )
+
+
+def _output_video_pix_fmt(feat: dict[str, Any], cfg: ConversionConfig) -> str:
+    if cfg.transcode_videos:
+        return cfg.output_video_pix_fmt
+    return (
+        feat.get("video_info", {}).get("video.pix_fmt")
+        or feat.get("info", {}).get("video.pix_fmt")
+        or cfg.output_video_pix_fmt
+    )
+
+
+def _normalize_video_feature(
+    feat: dict[str, Any],
+    crisp_info: dict[str, Any],
+    cfg: ConversionConfig,
+) -> dict[str, Any]:
+    """Normalize CRISP video metadata to RoboCasa/GR00T-compatible metadata."""
+    video_feat = dict(feat)
+    video_feat["names"] = ["height", "width", "channel"]
+
+    fps = _output_video_fps(crisp_info, cfg)
+    codec = _output_video_codec(feat, cfg)
+    pix_fmt = _output_video_pix_fmt(feat, cfg)
+
+    video_info = dict(video_feat.get("video_info", {}))
+    video_info.update(
+        {
+            "video.fps": fps,
+            "video.codec": codec,
+            "video.pix_fmt": pix_fmt,
+            "video.is_depth_map": False,
+            "has_audio": False,
+        }
+    )
+
+    info = dict(video_feat.get("info", {}))
+    if "video.height" not in info and len(video_feat.get("shape", [])) >= 1:
+        info["video.height"] = int(video_feat["shape"][0])
+    if "video.width" not in info and len(video_feat.get("shape", [])) >= 2:
+        info["video.width"] = int(video_feat["shape"][1])
+    info.update(
+        {
+            "video.codec": codec,
+            "video.pix_fmt": pix_fmt,
+            "video.is_depth_map": False,
+            "video.fps": fps,
+            "video.channels": 3,
+            "has_audio": False,
+        }
+    )
+
+    video_feat["video_info"] = video_info
+    video_feat["info"] = info
+    return video_feat
+
+
 def build_robocasa_like_features_from_crisp_info(
     crisp_info: dict[str, Any],
     cfg: ConversionConfig = ConversionConfig(),
@@ -264,10 +364,7 @@ def build_robocasa_like_features_from_crisp_info(
                 "names": list(_ROBOCASA_ACTION_NAMES),
             }
         elif key.startswith("observation.images."):
-            # Force video names to match RoboCasa convention
-            video_feat = dict(feat)
-            video_feat["names"] = ["height", "width", "channel"]
-            features[key] = video_feat
+            features[key] = _normalize_video_feature(feat, crisp_info, cfg)
         else:
             features[key] = dict(feat)
 
@@ -297,6 +394,8 @@ def convert_crisp_info_to_robocasa_like_info(
 ) -> dict[str, Any]:
     """Convert CRISP meta/info.json into RoboCasa-like feature metadata."""
     out = dict(crisp_info)
+    out["robot_type"] = cfg.output_robot_type
+    out["fps"] = _output_video_fps(crisp_info, cfg)
     out["features"] = build_robocasa_like_features_from_crisp_info(crisp_info, cfg)
     return out
 
@@ -311,6 +410,45 @@ def load_task_index_to_description(dataset_root: Path) -> dict[int, str]:
                 item = json.loads(line)
                 mapping[int(item["task_index"])] = item["task"]
     return mapping
+
+
+def _load_tasks_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    tasks: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        if line.strip():
+            tasks.append(json.loads(line))
+    return tasks
+
+
+def write_robocasa_like_tasks(
+    src_dataset_root: Path,
+    dst_dataset_root: Path,
+    cfg: ConversionConfig = ConversionConfig(),
+) -> Path:
+    """Write tasks.jsonl and ensure annotation.human.task_name has a valid index."""
+    src_tasks_path = Path(src_dataset_root) / "meta" / "tasks.jsonl"
+    dst_meta = Path(dst_dataset_root) / "meta"
+    dst_meta.mkdir(parents=True, exist_ok=True)
+    dst_tasks_path = dst_meta / "tasks.jsonl"
+
+    tasks = _load_tasks_jsonl(src_tasks_path)
+    if not tasks:
+        tasks = [{"task_index": 0, "task": cfg.task_name or "task"}]
+
+    task_by_index = {int(task["task_index"]): task for task in tasks}
+    if cfg.task_name_index not in task_by_index:
+        fallback_task = cfg.task_name or str(tasks[0].get("task", "task"))
+        tasks.append({"task_index": cfg.task_name_index, "task": fallback_task})
+    elif cfg.task_name is not None:
+        task_by_index[cfg.task_name_index]["task"] = cfg.task_name
+
+    dst_tasks_path.write_text(
+        "".join(json.dumps(task) + "\n" for task in tasks),
+        encoding="utf-8",
+    )
+    return dst_tasks_path
 
 
 def build_robocasa_like_modality() -> dict[str, Any]:
@@ -399,29 +537,41 @@ def write_robocasa_like_modality(dst_dataset_root: Path) -> Path:
     return modality_path
 
 
-def build_robocasa_like_embodiment() -> dict[str, Any]:
+def build_robocasa_like_embodiment(
+    robot_type: str = "PandaOmron",
+    fps: float = 20.0,
+) -> dict[str, Any]:
     """Build embodiment.json matching the RoboCasa reference dataset.
 
     For co-training, the converted real-robot dataset aligns with the
     RoboCasa simulation dataset and therefore uses the same embodiment.
     """
     return {
-        "robot_name": "PandaOmron",
-        "robot_type": "PandaOmron",
-        "record_frequency": 20.0,
-        "body_controller_frequency": 20.0,
-        "hand_controller_frequency": 20.0,
+        "robot_name": robot_type,
+        "robot_type": robot_type,
+        "record_frequency": float(fps),
+        "body_controller_frequency": float(fps),
+        "hand_controller_frequency": float(fps),
         "embodiment_tag": "robocasa_panda_omron",
     }
 
 
-def write_robocasa_like_embodiment(dst_dataset_root: Path) -> Path:
+def write_robocasa_like_embodiment(
+    dst_dataset_root: Path,
+    robot_type: str = "PandaOmron",
+    fps: float = 20.0,
+) -> Path:
     """Write embodiment.json under dst_dataset_root/meta and return the path."""
     dst_root = Path(dst_dataset_root)
     meta_dir = dst_root / "meta"
     meta_dir.mkdir(parents=True, exist_ok=True)
     path = meta_dir / "embodiment.json"
-    path.write_text(json.dumps(build_robocasa_like_embodiment(), indent=2))
+    path.write_text(
+        json.dumps(
+            build_robocasa_like_embodiment(robot_type=robot_type, fps=fps),
+            indent=2,
+        )
+    )
     return path
 
 
@@ -531,6 +681,117 @@ def iter_episode_frames(dataset_root: Path) -> Iterable[dict[str, Any]]:
             yield frame
 
 
+def _copy_tree_replace(src: Path, dst: Path) -> None:
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+
+
+def _video_feature_keys(info: dict[str, Any]) -> list[str]:
+    return [
+        key
+        for key, feat in info.get("features", {}).items()
+        if feat.get("dtype") == "video"
+    ]
+
+
+def _ffmpeg_encoder_for_codec(codec: str) -> str:
+    if codec in {"h264", "avc1"}:
+        return "libx264"
+    return codec
+
+
+def _transcode_video(src: Path, dst: Path, cfg: ConversionConfig, fps: float | int) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(src),
+        "-an",
+        "-c:v",
+        _ffmpeg_encoder_for_codec(cfg.output_video_codec),
+        "-pix_fmt",
+        cfg.output_video_pix_fmt,
+        "-r",
+        str(fps),
+        str(dst),
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("ffmpeg is required to transcode videos but was not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ffmpeg failed while transcoding {src} -> {dst}:\n{exc.stderr}"
+        ) from exc
+
+
+def _copy_or_transcode_videos(
+    src_root: Path,
+    dst_root: Path,
+    src_info: dict[str, Any],
+    cfg: ConversionConfig,
+) -> None:
+    src_videos = src_root / "videos"
+    if not src_videos.exists():
+        return
+
+    dst_videos = dst_root / "videos"
+    if not cfg.transcode_videos:
+        _copy_tree_replace(src_videos, dst_videos)
+        return
+
+    if dst_videos.exists():
+        shutil.rmtree(dst_videos)
+
+    video_keys = _video_feature_keys(src_info)
+    if not video_keys:
+        return
+
+    video_path_template = src_info.get(
+        "video_path",
+        "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+    )
+    total_episodes = src_info.get("total_episodes", 0)
+    chunks_size = src_info.get("chunks_size", 1000)
+    fps = _output_video_fps(src_info, cfg)
+
+    for episode_index in range(total_episodes):
+        episode_chunk = episode_index // chunks_size
+        for video_key in video_keys:
+            rel_path = Path(
+                video_path_template.format(
+                    episode_chunk=episode_chunk,
+                    video_key=video_key,
+                    episode_index=episode_index,
+                )
+            )
+            src_video = src_root / rel_path
+            dst_video = dst_root / rel_path
+            if not src_video.exists():
+                raise FileNotFoundError(f"Missing expected source video: {src_video}")
+            _transcode_video(src_video, dst_video, cfg, fps)
+
+
+def _build_huggingface_parquet_metadata(
+    ordered_columns: list[str],
+    features: dict[str, Any],
+) -> dict[bytes, bytes]:
+    parquet_features = {
+        col: features[col] for col in ordered_columns if col in features
+    }
+    return {
+        b"huggingface": json.dumps(
+            {"info": {"features": parquet_features}},
+            separators=(",", ":"),
+        ).encode("utf-8")
+    }
+
+
 def convert_crisp_dataset_to_robocasa_like(
     src_dataset_root: Path,
     dst_dataset_root: Path,
@@ -562,8 +823,9 @@ def convert_crisp_dataset_to_robocasa_like(
         if stale_path.exists():
             stale_path.unlink()
 
-    # Copy only allowed meta files
-    allowed_meta_files = {"episodes.jsonl", "tasks.jsonl"}
+    # Copy only allowed meta files. tasks.jsonl is rewritten below so
+    # annotation.human.task_name always points at a valid task index.
+    allowed_meta_files = {"episodes.jsonl"}
     for src_file in (src_root / "meta").iterdir():
         if src_file.name in ("info.json", "crisp_meta.json", "episodes_stats.jsonl"):
             continue
@@ -571,21 +833,15 @@ def convert_crisp_dataset_to_robocasa_like(
             dst_file = dst_meta / src_file.name
             shutil.copy2(src_file, dst_file)
 
-    # Copy videos directory if present
-    src_videos = src_root / "videos"
-    if src_videos.exists():
-        dst_videos = dst_root / "videos"
-        if dst_videos.exists():
-            shutil.rmtree(dst_videos)
-        shutil.copytree(src_videos, dst_videos)
+    write_robocasa_like_tasks(src_root, dst_root, cfg)
+
+    # Copy/transcode videos directory if present
+    _copy_or_transcode_videos(src_root, dst_root, src_info, cfg)
 
     # Copy images directory if present
     src_images = src_root / "images"
     if src_images.exists():
-        dst_images = dst_root / "images"
-        if dst_images.exists():
-            shutil.rmtree(dst_images)
-        shutil.copytree(src_images, dst_images)
+        _copy_tree_replace(src_images, dst_root / "images")
 
     # Accumulators for dataset-level stats
     stats_accumulators: dict[str, list[Any]] = {
@@ -627,10 +883,18 @@ def convert_crisp_dataset_to_robocasa_like(
         for i in range(num_rows):
             frame: dict[str, Any] = {col: rows[col][i] for col in keep_columns}
             converted = convert_frame_dict(frame, cfg)
+            if cfg.mark_terminal_done and i == num_rows - 1:
+                converted["next.done"] = True
+                converted["next.reward"] = float(cfg.terminal_reward)
             for col in keep_columns:
                 converted_rows[col].append(converted[col])
             # Also collect newly injected columns
-            for col in ("annotation.human.task_description", "annotation.human.task_name", "next.reward", "next.done"):
+            for col in (
+                "annotation.human.task_description",
+                "annotation.human.task_name",
+                "next.reward",
+                "next.done",
+            ):
                 converted_rows.setdefault(col, []).append(converted[col])
 
         # Build ordered column list for output parquet
@@ -695,7 +959,13 @@ def convert_crisp_dataset_to_robocasa_like(
             if col in stats_accumulators:
                 stats_accumulators[col].extend(converted_rows[col])
 
-        new_schema = pa.schema(new_fields, metadata=table.schema.metadata)
+        new_schema = pa.schema(
+            new_fields,
+            metadata=_build_huggingface_parquet_metadata(
+                ordered_columns,
+                dst_info.get("features", {}),
+            ),
+        )
         new_table = pa.table(dict(zip(ordered_columns, arrays)), schema=new_schema)
         pq.write_table(new_table, dst_parquet)
 
@@ -706,7 +976,11 @@ def convert_crisp_dataset_to_robocasa_like(
     write_robocasa_like_modality(dst_root)
 
     # Write embodiment.json
-    write_robocasa_like_embodiment(dst_root)
+    write_robocasa_like_embodiment(
+        dst_root,
+        robot_type=cfg.output_robot_type,
+        fps=float(_output_video_fps(src_info, cfg)),
+    )
 
     # Compute and write stats.json
     stats = _compute_stats_from_arrays(stats_accumulators, dst_info.get("features", {}))

@@ -19,6 +19,7 @@ from dataset.crisp_to_robocasa import (  # noqa: E402
     convert_frame_dict,
     inject_annotation_into_frame,
     load_task_index_to_description,
+    write_robocasa_like_tasks,
     write_robocasa_like_modality,
 )
 
@@ -95,6 +96,20 @@ def test_write_robocasa_like_modality_creates_meta_file(tmp_path: Path) -> None:
     assert "annotation" in loaded
 
 
+def test_write_robocasa_like_tasks_adds_task_name_index(tmp_path: Path) -> None:
+    src_root = tmp_path / "src"
+    dst_root = tmp_path / "dst"
+    (src_root / "meta").mkdir(parents=True)
+    (src_root / "meta" / "tasks.jsonl").write_text(
+        json.dumps({"task_index": 0, "task": "open the microwave"}) + "\n"
+    )
+
+    tasks_path = write_robocasa_like_tasks(src_root, dst_root, CFG)
+    tasks = [json.loads(line) for line in tasks_path.read_text().splitlines()]
+    assert {task["task_index"] for task in tasks} == {0, 1}
+    assert tasks[-1]["task"] == "open the microwave"
+
+
 def test_inject_annotation_into_frame_uses_task_index_lookup() -> None:
     frame = {
         "task_index": 0,
@@ -135,6 +150,7 @@ def test_converted_info_contains_annotation_feature() -> None:
     assert out["features"]["next.reward"]["dtype"] == "float32"
     assert "next.done" in out["features"]
     assert out["features"]["next.done"]["dtype"] == "bool"
+    assert out["robot_type"] == "PandaOmron"
 
 
 def test_integration_converted_dataset_contains_annotation_column(
@@ -160,6 +176,14 @@ def test_integration_converted_dataset_contains_annotation_column(
     assert isinstance(rows["next.reward"][0], float)
     assert "next.done" in table.column_names
     assert isinstance(rows["next.done"][0], bool)
+    assert rows["next.done"][-1] is True
+    assert rows["next.reward"][-1] == pytest.approx(1.0)
+
+    tasks = [
+        json.loads(line)
+        for line in (Path(out_root) / "meta" / "tasks.jsonl").read_text().splitlines()
+    ]
+    assert 1 in {int(task["task_index"]) for task in tasks}
 
 
 def test_integration_converted_dataset_writes_modality_json(tmp_path: Path) -> None:
