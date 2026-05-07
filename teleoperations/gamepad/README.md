@@ -2,7 +2,7 @@
 
 This module is for direct Xbox gamepad teleoperation/recording on a single FR3.
 
-## Commands
+## Commands Example
 
 - Teleop (2-cam/default env):
   - `pixi run teleop-gamepad-fr3`
@@ -16,6 +16,14 @@ This module is for direct Xbox gamepad teleoperation/recording on a single FR3.
 pixi run teleop-gamepad-fr3-3cams -- --home-config robots/fr3_root_home_year2.yaml
 
 pixi run record-gamepad-fr3-3cams -- --repo-id <repo_id> --home-config robots/fr3_root_home_year2.yaml --after-teleop robots/fr3_root_home_year2.yaml
+
+pixi run record-gamepad-fr3-3cams -- \
+--repo-id loca/open_close_blenderlid_practice \
+--home-config robots/fr3_root_home_year2.yaml \
+--after-teleop robots/fr3_root_home_year2.yaml \
+--fps 20 \
+--tasks "	Open the blender by taking off the lid and placing it on the counter." \
+--num-episodes 20
 
 ## D-pad recording controls
 
