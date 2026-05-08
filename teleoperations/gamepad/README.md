@@ -18,12 +18,12 @@ pixi run teleop-gamepad-fr3-3cams -- --home-config robots/fr3_root_home_year2.ya
 pixi run record-gamepad-fr3-3cams -- --repo-id <repo_id> --home-config robots/fr3_root_home_year2.yaml --after-teleop robots/fr3_root_home_year2.yaml
 
 pixi run record-gamepad-fr3-3cams -- \
---repo-id loca/open_close_blenderlid_practice \
---home-config robots/fr3_root_home_year2.yaml \
---after-teleop robots/fr3_root_home_year2.yaml \
+--repo-id local/open_close_blenderlid \
+--home-config robots/fr3_root_home_robocasa.yaml \
+--after-teleop robots/fr3_root_home_robocasa.yaml \
 --fps 20 \
 --tasks "	Open the blender by taking off the lid and placing it on the counter." \
---num-episodes 20
+--num-episodes 60
 
 ## D-pad recording controls
 
