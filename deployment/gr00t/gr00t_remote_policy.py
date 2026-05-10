@@ -1,8 +1,8 @@
-"""HTTP GR00T policy adapter for CRISP deployment.
+"""Remote GR00T policy adapter for CRISP deployment.
 
 This module intentionally does not import Isaac-GR00T.  GR00T runs in its own
-UV/CUDA environment as an HTTP inference service, while this adapter stays in
-the ROS2/CRISP pixi environment and only handles schema conversion.
+UV/CUDA environment as an inference service, while this adapter stays in the
+ROS2/CRISP pixi environment and only handles schema conversion.
 """
 
 from __future__ import annotations
@@ -13,16 +13,12 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
-import json_numpy
 import numpy as np
-import requests
 from crisp_gym.envs.manipulator_env import ManipulatorBaseEnv
 from scipy.spatial.transform import Rotation
 
 from deployment.gr00t.constants import CRISP_TO_GROOT_IMAGE_KEYS, DEFAULT_TASK
-
-
-json_numpy.patch()
+from deployment.gr00t.transport import GrootTransport, make_groot_client
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +28,17 @@ Action = np.ndarray
 
 
 class Gr00tRemotePolicy:
-    """Call a GR00T HTTP server and execute returned actions in a CRISP env."""
+    """Call a remote GR00T server and execute returned actions in a CRISP env."""
 
     def __init__(
         self,
         *,
         env: ManipulatorBaseEnv,
+        transport: GrootTransport = "http",
         server_url: str,
+        host: str = "127.0.0.1",
+        port: int = 5555,
+        api_token: str | None = None,
         task: str = DEFAULT_TASK,
         action_chunk_size: int = 1,
         action_timeout_sec: float = 20.0,
@@ -52,7 +52,10 @@ class Gr00tRemotePolicy:
             raise ValueError("--action-chunk-size must be >= 1")
 
         self.env = env
+        self.transport = transport
         self.server_url = server_url.rstrip("/")
+        self.host = host
+        self.port = port
         self.task = task
         self.action_chunk_size = action_chunk_size
         self.action_timeout_sec = action_timeout_sec
@@ -61,7 +64,14 @@ class Gr00tRemotePolicy:
         self.max_rotation_step_rad = max_rotation_step_rad
         self.dry_run = dry_run
 
-        self.session = requests.Session()
+        self.client = make_groot_client(
+            transport=self.transport,
+            server_url=self.server_url,
+            host=self.host,
+            port=self.port,
+            timeout_sec=self.action_timeout_sec,
+            api_token=api_token,
+        )
         self._action_queue: deque[Action] = deque()
         self._warned_nonzero_base_motion = False
         self._warned_control_mode = False
@@ -70,28 +80,22 @@ class Gr00tRemotePolicy:
             self.check_health()
 
         logger.info(
-            "GR00T remote policy configured: server=%s task=%r chunk=%s dry_run=%s",
-            self.server_url,
+            "GR00T remote policy configured: transport=%s server=%s task=%r chunk=%s dry_run=%s",
+            self.transport,
+            self._server_label(),
             self.task,
             self.action_chunk_size,
             self.dry_run,
         )
 
     def check_health(self) -> None:
-        response = self.session.get(
-            f"{self.server_url}/health",
-            timeout=self.action_timeout_sec,
-        )
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"GR00T server health check failed: {response.status_code} {response.text}"
-            )
+        self.client.check_health()
 
     def reset(self) -> None:
         self._action_queue.clear()
 
     def shutdown(self) -> None:
-        self.session.close()
+        self.client.close()
 
     def make_data_fn(self) -> Callable[[], tuple[Observation, Action]]:
         def _fn() -> tuple[Observation, Action]:
@@ -115,21 +119,15 @@ class Gr00tRemotePolicy:
 
     def request_action(self, groot_obs: Observation) -> dict[str, Any]:
         start = time.perf_counter()
-        response = self.session.post(
-            f"{self.server_url}/act",
-            json={"observation": groot_obs},
-            timeout=self.action_timeout_sec,
-        )
+        action = self.client.get_action(groot_obs)
         elapsed = time.perf_counter() - start
+        logger.debug("GR00T %s action request took %.3fs", self.transport, elapsed)
+        return action
 
-        if response.status_code != 200:
-            raise RuntimeError(
-                "GR00T action request failed: "
-                f"{response.status_code} {response.text[:1000]}"
-            )
-
-        logger.debug("GR00T action request took %.3fs", elapsed)
-        return response.json()
+    def _server_label(self) -> str:
+        if self.transport == "http":
+            return self.server_url
+        return f"tcp://{self.host}:{self.port}"
 
     def crisp_obs_to_groot_obs(self, obs: Observation) -> Observation:
         cartesian = _require_vector(obs, "observation.state.cartesian", 6)

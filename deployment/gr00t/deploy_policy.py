@@ -22,7 +22,7 @@ from teleoperations.gamepad.home_config import get_gamepad_home_config
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Deploy a GR00T policy through a remote HTTP inference server"
+        description="Deploy a GR00T policy through a remote inference server"
     )
     parser.add_argument("--repo-id", type=str, default=None)
     parser.add_argument("--robot-type", type=str, default="franka")
@@ -48,10 +48,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-namespace", type=str, default=None)
     parser.add_argument("--evaluate", action="store_true", default=False)
     parser.add_argument(
+        "--groot-transport",
+        choices=["http", "zmq"],
+        default="http",
+        help="Transport used to talk to the GR00T inference server.",
+    )
+    parser.add_argument(
         "--groot-server",
         type=str,
         default="http://127.0.0.1:8000",
         help="HTTP URL of the GR00T inference server.",
+    )
+    parser.add_argument(
+        "--groot-host",
+        type=str,
+        default="127.0.0.1",
+        help="ZMQ host for the GR00T inference server.",
+    )
+    parser.add_argument(
+        "--groot-port",
+        type=int,
+        default=5555,
+        help="ZMQ port for the GR00T inference server.",
+    )
+    parser.add_argument(
+        "--groot-api-token",
+        type=str,
+        default=None,
+        help="Optional API token for GR00T ZMQ requests.",
     )
     parser.add_argument(
         "--task",
@@ -128,7 +152,8 @@ def evaluation_output_file(args: argparse.Namespace) -> str:
         return "evaluation_results.csv"
 
     datetime_now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_server = args.groot_server.replace("/", "_").replace(":", "_")
+    server = args.groot_server if args.groot_transport == "http" else f"{args.groot_host}_{args.groot_port}"
+    safe_server = server.replace("/", "_").replace(":", "_")
     return (
         prompt.prompt(
             "Please enter the output file for evaluation results",
@@ -190,7 +215,11 @@ def main() -> int:
         logger.info("Setting up the GR00T remote policy.")
         policy = Gr00tRemotePolicy(
             env=env,
+            transport=args.groot_transport,
             server_url=args.groot_server,
+            host=args.groot_host,
+            port=args.groot_port,
+            api_token=args.groot_api_token,
             task=args.task,
             action_chunk_size=args.action_chunk_size,
             action_timeout_sec=args.action_timeout_sec,
@@ -257,7 +286,7 @@ def main() -> int:
                     )
                     logger.info("Episode finished.")
 
-        logger.info("Shutting down GR00T HTTP client.")
+        logger.info("Shutting down GR00T client.")
         policy.shutdown()
         policy = None
 

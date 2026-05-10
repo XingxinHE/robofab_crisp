@@ -57,13 +57,17 @@ if [[ "${1:-}" == "--help" ]]; then
   cat <<EOF
 Deploy GR00T with profile '${PROFILE_NAME}'.
 
-Start the GR00T HTTP server separately, then run this client.
+Start the GR00T server separately, then run this client.
 
 Usage:
-  pixi run ${PROFILE_NAME} -- --groot-server http://127.0.0.1:8000 [extra args]
+  ZMQ:  pixi run ${PROFILE_NAME} -- --groot-transport zmq --groot-host 127.0.0.1 --groot-port 5555 [extra args]
+  HTTP: pixi run ${PROFILE_NAME} -- --groot-transport http --groot-server http://127.0.0.1:8000 [extra args]
 
 Defaults:
+  --groot-transport http
   --groot-server http://127.0.0.1:8000
+  --groot-host 127.0.0.1
+  --groot-port 5555
   --repo-id ${DEFAULT_REPO_ID}
   --num-episodes 1
   --env-config <auto-selected by ${PREFLIGHT_MODULE}>
@@ -95,7 +99,11 @@ if [[ "${FORBID_ENV_NAMESPACE_ARG}" == "1" && " $* " == *" --env-namespace "* ]]
   exit 1
 fi
 
+GROOT_TRANSPORT="http"
 GROOT_SERVER="http://127.0.0.1:8000"
+GROOT_HOST="127.0.0.1"
+GROOT_PORT="5555"
+GROOT_API_TOKEN=""
 REPO_ID="${DEFAULT_REPO_ID}"
 NUM_EPISODES="1"
 WANTS_RESUME=0
@@ -103,8 +111,24 @@ EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --groot-transport)
+      GROOT_TRANSPORT="$2"
+      shift 2
+      ;;
     --groot-server)
       GROOT_SERVER="$2"
+      shift 2
+      ;;
+    --groot-host)
+      GROOT_HOST="$2"
+      shift 2
+      ;;
+    --groot-port)
+      GROOT_PORT="$2"
+      shift 2
+      ;;
+    --groot-api-token)
+      GROOT_API_TOKEN="$2"
       shift 2
       ;;
     --repo-id)
@@ -162,7 +186,21 @@ if [[ -z "${ENV_CONFIG}" ]]; then
   exit 1
 fi
 
-echo "[${PROFILE_NAME}] Using GR00T server: ${GROOT_SERVER}"
+SERVER_ARGS=(
+  --groot-transport "${GROOT_TRANSPORT}"
+  --groot-server "${GROOT_SERVER}"
+  --groot-host "${GROOT_HOST}"
+  --groot-port "${GROOT_PORT}"
+)
+if [[ -n "${GROOT_API_TOKEN}" ]]; then
+  SERVER_ARGS+=(--groot-api-token "${GROOT_API_TOKEN}")
+fi
+
+if [[ "${GROOT_TRANSPORT}" == "zmq" ]]; then
+  echo "[${PROFILE_NAME}] Using GR00T ZMQ server: tcp://${GROOT_HOST}:${GROOT_PORT}"
+else
+  echo "[${PROFILE_NAME}] Using GR00T HTTP server: ${GROOT_SERVER}"
+fi
 echo "[${PROFILE_NAME}] Using env config: ${ENV_CONFIG}"
 echo "[${PROFILE_NAME}] Using env namespace: ${ENV_NAMESPACE:-<root>}"
 echo "[${PROFILE_NAME}] Recording deployment episodes to repo: ${REPO_ID}"
@@ -172,7 +210,7 @@ exec python -m deployment.gr00t.deploy_policy \
   --num-episodes "${NUM_EPISODES}" \
   --fps 5 \
   --recording-manager-type keyboard \
-  --groot-server "${GROOT_SERVER}" \
+  "${SERVER_ARGS[@]}" \
   --env-config "${ENV_CONFIG}" \
   --env-namespace "${ENV_NAMESPACE}" \
   --log-level INFO \
