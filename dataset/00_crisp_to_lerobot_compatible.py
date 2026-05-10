@@ -11,6 +11,12 @@ which causes a matmul-shape mismatch at training time.
 This script clones the source dataset and strips the redundant keys
 from meta/info.json so that only observation.state (20-D) remains.
 The original dataset is kept untouched for future recording.
+
+Example:
+pixi run python dataset/00_crisp_to_lerobot_compatible.py \
+--src-repo-id local/OpenBlenderLid
+--dst-repo-id local/OpenBlenderLid_LeRobot
+--overwrite
 """
 
 from __future__ import annotations
@@ -20,7 +26,6 @@ import json
 import shutil
 import sys
 from pathlib import Path
-
 
 SUBSTATE_KEYS = [
     "observation.state.cartesian",
