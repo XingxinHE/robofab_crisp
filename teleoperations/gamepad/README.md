@@ -16,9 +16,12 @@ This module is for direct Xbox gamepad teleoperation/recording on a single FR3.
   - `pixi run record-gamepad-fr3-3cams-no-auto-home -- --repo-id <repo_id> ...`
 
 pixi run teleop-gamepad-fr3-3cams -- --home-config robots/fr3_root_home_year2.yaml
+pixi run teleop-gamepad-fr3-3cams -- --home-config robots/fr3_root_home_robocasa.yaml \
+--after-teleop robots/fr3_root_home_robocasa.yaml \
 
 pixi run record-gamepad-fr3-3cams -- --repo-id <repo_id> --home-config robots/fr3_root_home_year2.yaml --after-teleop robots/fr3_root_home_year2.yaml
 
+# Xingxin
 pixi run record-gamepad-fr3-3cams -- \
 --repo-id local/open_close_blenderlid \
 --home-config robots/fr3_root_home_robocasa.yaml \
@@ -31,6 +34,13 @@ pixi run record-gamepad-fr3-3cams-no-auto-home -- \
 --repo-id local/custom_start_pose \
 --tasks "custom start pose demonstration" \
 --num-episodes 10
+pixi run record-gamepad-fr3-3cams -- \
+--repo-id local/TurnOnBlender_practice \
+--home-config robots/fr3_root_home_robocasa.yaml \
+--after-teleop robots/fr3_root_home_robocasa.yaml \
+--fps 20 \
+--tasks "Turn on the blender by pressing the power button." \
+--num-episodes 30
 
 ## D-pad recording controls
 
