@@ -11,6 +11,8 @@ import logging
 import time
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -25,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 Observation = dict[str, Any]
 Action = np.ndarray
+
+
+@dataclass
+class InferenceResult:
+    action_horizon: dict[str, Any]
+    timings: dict[str, float]
 
 
 class Gr00tRemotePolicy:
@@ -47,9 +55,15 @@ class Gr00tRemotePolicy:
         max_rotation_step_rad: float = 0.06,
         dry_run: bool = False,
         validate_server: bool = True,
+        async_inference: bool = False,
+        prefetch_threshold: int | None = None,
+        log_timing: bool = False,
+        timing_log_interval: int = 25,
     ) -> None:
         if action_chunk_size < 1:
             raise ValueError("--action-chunk-size must be >= 1")
+        if prefetch_threshold is not None and prefetch_threshold < 0:
+            raise ValueError("--prefetch-threshold must be >= 0")
 
         self.env = env
         self.transport = transport
@@ -63,6 +77,14 @@ class Gr00tRemotePolicy:
         self.max_translation_step_m = max_translation_step_m
         self.max_rotation_step_rad = max_rotation_step_rad
         self.dry_run = dry_run
+        self.async_inference = async_inference
+        self.prefetch_threshold = (
+            prefetch_threshold
+            if prefetch_threshold is not None
+            else max(1, min(action_chunk_size - 1, action_chunk_size // 2))
+        )
+        self.log_timing = log_timing
+        self.timing_log_interval = max(1, timing_log_interval)
 
         self.client = make_groot_client(
             transport=self.transport,
@@ -75,16 +97,29 @@ class Gr00tRemotePolicy:
         self._action_queue: deque[Action] = deque()
         self._warned_nonzero_base_motion = False
         self._warned_control_mode = False
+        self._executor: ThreadPoolExecutor | None = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="gr00t-inference")
+            if self.async_inference
+            else None
+        )
+        self._pending_future: Future[InferenceResult] | None = None
+        self._last_inference_timings: dict[str, float] = {}
+        self._frame_count = 0
 
         if validate_server:
             self.check_health()
 
         logger.info(
-            "GR00T remote policy configured: transport=%s server=%s task=%r chunk=%s dry_run=%s",
+            (
+                "GR00T remote policy configured: transport=%s server=%s task=%r "
+                "chunk=%s async=%s prefetch_threshold=%s dry_run=%s"
+            ),
             self.transport,
             self._server_label(),
             self.task,
             self.action_chunk_size,
+            self.async_inference,
+            self.prefetch_threshold,
             self.dry_run,
         )
 
@@ -93,29 +128,106 @@ class Gr00tRemotePolicy:
 
     def reset(self) -> None:
         self._action_queue.clear()
+        if self._pending_future is not None:
+            self._pending_future.cancel()
+        self._pending_future = None
 
     def shutdown(self) -> None:
+        if self._pending_future is not None:
+            self._pending_future.cancel()
+            self._pending_future = None
+        if self._executor is not None:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
         self.client.close()
 
     def make_data_fn(self) -> Callable[[], tuple[Observation, Action]]:
         def _fn() -> tuple[Observation, Action]:
-            obs_raw = self.env.get_obs()
+            frame_start = time.perf_counter()
+            timings: dict[str, float] = {}
 
-            if not self._action_queue:
-                groot_obs = self.crisp_obs_to_groot_obs(obs_raw)
-                action_horizon = self.request_action(groot_obs)
-                self._enqueue_actions(action_horizon)
+            obs_start = time.perf_counter()
+            obs_raw = self.env.get_obs()
+            timings["get_obs"] = time.perf_counter() - obs_start
+
+            wait_start = time.perf_counter()
+            if self.async_inference:
+                self._prepare_async_actions(obs_raw)
+            else:
+                if not self._action_queue:
+                    result = self._infer_from_obs(obs_raw)
+                    self._record_inference_result(result)
+            timings["inference_wait"] = time.perf_counter() - wait_start
 
             action = self._action_queue.popleft()
+
+            step_start = time.perf_counter()
             if not self.dry_run:
                 try:
                     self.env.step(action, block=False)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Error during environment step: %s", exc)
+            timings["env_step"] = time.perf_counter() - step_start
+            timings["total"] = time.perf_counter() - frame_start
+
+            self._log_frame_timing(timings)
 
             return obs_raw, action
 
         return _fn
+
+    def _prepare_async_actions(self, obs_raw: Observation) -> None:
+        self._collect_pending_inference(block=False)
+
+        if (
+            len(self._action_queue) <= self.prefetch_threshold
+            and self._pending_future is None
+        ):
+            self._start_async_inference(obs_raw)
+
+        if not self._action_queue:
+            if self._pending_future is None:
+                self._start_async_inference(obs_raw)
+            self._collect_pending_inference(block=True)
+
+    def _start_async_inference(self, obs_raw: Observation) -> None:
+        if self._executor is None:
+            raise RuntimeError("Async inference was requested but executor is not initialized.")
+        if self._pending_future is not None:
+            return
+
+        obs_snapshot = _snapshot_required_obs(obs_raw)
+        self._pending_future = self._executor.submit(self._infer_from_obs, obs_snapshot)
+
+    def _collect_pending_inference(self, *, block: bool) -> bool:
+        if self._pending_future is None:
+            return False
+        if not block and not self._pending_future.done():
+            return False
+
+        future = self._pending_future
+        self._pending_future = None
+        result = future.result(timeout=self.action_timeout_sec if block else 0.0)
+        self._record_inference_result(result)
+        return True
+
+    def _infer_from_obs(self, obs: Observation) -> InferenceResult:
+        timings: dict[str, float] = {}
+
+        convert_start = time.perf_counter()
+        groot_obs = self.crisp_obs_to_groot_obs(obs)
+        timings["convert_obs"] = time.perf_counter() - convert_start
+
+        request_start = time.perf_counter()
+        action_horizon = self.request_action(groot_obs)
+        timings["request_action"] = time.perf_counter() - request_start
+        timings["total_inference"] = timings["convert_obs"] + timings["request_action"]
+
+        return InferenceResult(action_horizon=action_horizon, timings=timings)
+
+    def _record_inference_result(self, result: InferenceResult) -> None:
+        self._last_inference_timings = result.timings
+        self._enqueue_actions(result.action_horizon)
 
     def request_action(self, groot_obs: Observation) -> dict[str, Any]:
         start = time.perf_counter()
@@ -123,6 +235,29 @@ class Gr00tRemotePolicy:
         elapsed = time.perf_counter() - start
         logger.debug("GR00T %s action request took %.3fs", self.transport, elapsed)
         return action
+
+    def _log_frame_timing(self, timings: dict[str, float]) -> None:
+        if not self.log_timing:
+            return
+
+        self._frame_count += 1
+        if self._frame_count % self.timing_log_interval != 0:
+            return
+
+        logger.info(
+            (
+                "GR00T timing frame=%s total=%.3fs get_obs=%.3fs wait=%.3fs "
+                "step=%.3fs queue=%s pending=%s last_infer=%s"
+            ),
+            self._frame_count,
+            timings.get("total", 0.0),
+            timings.get("get_obs", 0.0),
+            timings.get("inference_wait", 0.0),
+            timings.get("env_step", 0.0),
+            len(self._action_queue),
+            self._pending_future is not None,
+            _format_timings(self._last_inference_timings),
+        )
 
     def _server_label(self) -> str:
         if self.transport == "http":
@@ -272,6 +407,22 @@ def _require_vector(obs: Observation, key: str, min_len: int) -> np.ndarray:
     return value
 
 
+def _snapshot_required_obs(obs: Observation) -> Observation:
+    keys = {
+        "observation.state.cartesian",
+        "observation.state.gripper",
+        *CRISP_TO_GROOT_IMAGE_KEYS.values(),
+    }
+
+    snapshot: Observation = {}
+    for key in keys:
+        if key not in obs:
+            raise KeyError(f"Missing CRISP observation key: {key}")
+        value = obs[key]
+        snapshot[key] = np.array(value, copy=True) if isinstance(value, np.ndarray) else value
+    return snapshot
+
+
 def _ensure_hwc_uint8(obs: Observation, key: str) -> np.ndarray:
     if key not in obs:
         raise KeyError(f"Missing CRISP image key: {key}")
@@ -334,3 +485,9 @@ def _clip_rotvec_norm(rotvec: np.ndarray, max_norm: float) -> np.ndarray:
     if norm > max_norm and norm > 0.0:
         rotvec = rotvec / norm * max_norm
     return rotvec.astype(np.float32)
+
+
+def _format_timings(timings: dict[str, float]) -> str:
+    if not timings:
+        return "{}"
+    return "{" + ", ".join(f"{key}={value:.3f}s" for key, value in timings.items()) + "}"

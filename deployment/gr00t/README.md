@@ -72,9 +72,30 @@ pixi run deploy-gr00t-fr3-3cams-gamepad -- \
   --num-episodes 1 \
   --task "Close the lid blender by securely placing the lid on top." \
   --fps 5 \
-  --action-chunk-size 1 \
+  --action-chunk-size 4 \
+  --async-inference \
+  --prefetch-threshold 2 \
+  --log-timing \
+  --timing-log-interval 25 \
   --home-config fr3_root_home_year2
 ```
 
-Start with `--fps 5 --action-chunk-size 1`. If inference latency is stable, raise
-the FPS and/or use a small chunk size such as `4`.
+Start with `--fps 5 --action-chunk-size 4 --async-inference`. If behavior is
+stable, try `--fps 10 --action-chunk-size 8`. If the model output becomes too
+open-loop or delayed, reduce the chunk size before increasing FPS.
+
+## Benchmark Inference Latency
+
+```bash
+pixi run python -m deployment.gr00t.smoke_client \
+  --groot-transport zmq \
+  --groot-host 127.0.0.1 \
+  --groot-port 5555 \
+  --warmup-requests 3 \
+  --num-requests 20 \
+  --no-print-action-shapes
+```
+
+If pure GR00T request latency is still around `0.5-0.8s`, the main deployment
+fix is action chunking plus async prefetch. You can also benchmark lower server
+denoising, for example `--denoising-steps 2`, but that changes policy quality.

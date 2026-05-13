@@ -95,6 +95,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-rotation-step-rad", type=float, default=0.06)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument(
+        "--async-inference",
+        action="store_true",
+        default=False,
+        help="Prefetch GR00T horizons in a background thread while queued actions execute.",
+    )
+    parser.add_argument(
+        "--prefetch-threshold",
+        type=int,
+        default=None,
+        help=(
+            "Start a background GR00T request when queued actions are at or below this count. "
+            "Default: about half of --action-chunk-size."
+        ),
+    )
+    parser.add_argument(
+        "--log-timing",
+        action="store_true",
+        default=False,
+        help="Log frame-level timing breakdowns for deployment profiling.",
+    )
+    parser.add_argument("--timing-log-interval", type=int, default=25)
+    parser.add_argument(
         "--validate-server",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -228,6 +250,10 @@ def main() -> int:
             max_rotation_step_rad=args.max_rotation_step_rad,
             dry_run=args.dry_run,
             validate_server=args.validate_server,
+            async_inference=args.async_inference,
+            prefetch_threshold=args.prefetch_threshold,
+            log_timing=args.log_timing,
+            timing_log_interval=args.timing_log_interval,
         )
 
         features = get_features(env)

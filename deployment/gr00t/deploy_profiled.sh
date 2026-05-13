@@ -76,6 +76,9 @@ Defaults:
   --fps 5
   --task "Close the lid blender by securely placing the lid on top."
   --action-chunk-size 1
+  --async-inference                Optional background horizon prefetching
+  --prefetch-threshold <n>         Optional queue threshold for async prefetch
+  --log-timing                     Optional frame timing logs
   --max-translation-step-m 0.006
   --max-rotation-step-rad 0.06
   --home-config <name-or-path>        Optional robot YAML or homes/*.yaml for deployment homing

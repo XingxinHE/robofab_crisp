@@ -604,6 +604,17 @@ Run structural validation:
 cd /home/hex/Documents/github/playground/understand_crisp/robofab_crisp
 pixi run python dataset/02_validate_matched_robocasa.py \
   --robocasa-reference-root /data/robocasa/dataset/v1.0/pretrain/atomic/OpenMicrowave/20250819/lerobot
+
+pixi run python dataset/02_validate_matched_robocasa.py \
+--converted-dataset-root /home/hex/.cache/huggingface/lerobot/local/CloseBlenderLid_To_Casa \
+--robocasa-reference-root /data/robocasa/dataset/v1.0/pretrain/atomic/CloseBlenderLid/20260504_256x256/lerobot \
+--source-dataset-root /home/hex/.cache/huggingface/lerobot/local/CloseBlenderLid_LeRobot
+
+pixi run python dataset/02_validate_matched_robocasa.py \
+--converted-dataset-root /home/hex/.cache/huggingface/lerobot/local/OpenBlenderLid_To_Casa \
+--robocasa-reference-root /data/robocasa/dataset/v1.0/pretrain/atomic/OpenBlenderLid/20260504_256x256/lerobot \
+--source-dataset-root /home/hex/.cache/huggingface/lerobot/local/OpenBlenderLid_LeRobot
+
 ```
 
 Run GR00T compatibility validation:
@@ -611,5 +622,7 @@ Run GR00T compatibility validation:
 ```sh
 cd /home/hex/Documents/github/playground/understand_crisp/robofab_robocasa
 uv run --group gr00t --extra cu128 python \
-  /home/hex/Documents/github/playground/understand_crisp/robofab_crisp/dataset/03_validate_groot_robocasa_compat.py
+/home/hex/Documents/github/playground/understand_crisp/robofab_crisp/dataset/03_validate_groot_robocasa_compat.py \
+--converted-dataset-root /home/hex/.cache/huggingface/lerobot/local/OpenBlenderLid_To_Casa \
+--robocasa-reference-root /data/robocasa/dataset/v1.0/pretrain/atomic/OpenBlenderLid/20260504_256x256/lerobot 
 ```
