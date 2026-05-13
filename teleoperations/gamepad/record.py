@@ -91,7 +91,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--linear-step", type=float, default=0.003)
     parser.add_argument("--yaw-step", type=float, default=0.03)
     parser.add_argument("--roll-pitch-step", type=float, default=0.02)
-    parser.add_argument("--enable-roll-pitch", action="store_true")
+    parser.add_argument(
+        "--enable-roll-pitch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable right-stick roll/pitch control. Use --no-enable-roll-pitch to disable.",
+    )
     parser.add_argument("--log-every", type=float, default=1.5)
 
     argv = sys.argv[1:]
@@ -105,12 +110,12 @@ def print_mapping() -> None:
     print("  Left stick : XY translation")
     print("  LT / RT    : Z down / up")
     print("  LB / RB    : yaw + / -")
-    print("  Right stick: roll/pitch (toggle with Back)")
+    print("  Right stick: roll/pitch")
     print("  A / X      : close / open gripper")
     print("  Y          : sync target to current pose")
     print("  B          : request exit")
     print("  Start      : coarse/fine mode")
-    print("  Back       : toggle roll/pitch")
+    print("  Back       : toggle roll/pitch enable/disable")
     print("  D-pad Up   : record start/stop")
     print("  D-pad Right: save episode")
     print("  D-pad Left : delete episode")

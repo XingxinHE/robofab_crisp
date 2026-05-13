@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Standalone Xbox gamepad teleop for FR3 (translation-first).
+"""Standalone Xbox gamepad teleop for FR3.
 
 Design goals:
 - Standalone interface module (no changes to existing SpaceMouse/Viser pipelines)
 - Direct FR3 teleop through ManipulatorCartesianEnv
-- Translation-first defaults (roll/pitch disabled by default)
+- 6-DoF defaults with roll/pitch enabled.
 """
 
 from __future__ import annotations
@@ -33,7 +33,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--linear-step", type=float, default=0.003)
     parser.add_argument("--yaw-step", type=float, default=0.03)
     parser.add_argument("--roll-pitch-step", type=float, default=0.02)
-    parser.add_argument("--enable-roll-pitch", action="store_true")
+    parser.add_argument(
+        "--enable-roll-pitch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable right-stick roll/pitch control. Use --no-enable-roll-pitch to disable.",
+    )
     parser.add_argument(
         "--home-on-start", action=argparse.BooleanOptionalAction, default=True
     )
@@ -56,7 +61,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def print_mapping() -> None:
-    print("\nXbox mapping (translation-first):")
+    print("\nXbox mapping:")
     print("  Left stick      : XY translation")
     print("  LT / RT         : Z down / up")
     print("  LB / RB         : Yaw + / -")
@@ -65,7 +70,8 @@ def print_mapping() -> None:
     print("  Y               : Sync target to current pose")
     print("  B               : Quit")
     print("  Start           : Toggle fine/coarse mode")
-    print("  Back            : Toggle roll/pitch enable")
+    print("  Right stick     : Roll/pitch")
+    print("  Back            : Toggle roll/pitch enable/disable")
 
 
 def main() -> int:

@@ -25,7 +25,7 @@ class Gamepad6DofConfig:
     yaw_step: float = 0.03
     roll_pitch_step: float = 0.02
     fine_scale: float = 0.4
-    enable_roll_pitch: bool = False
+    enable_roll_pitch: bool = True
 
 
 @dataclass
