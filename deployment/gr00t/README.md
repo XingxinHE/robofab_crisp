@@ -68,16 +68,16 @@ pixi run deploy-gr00t-fr3-3cams-gamepad -- \
   --groot-transport zmq \
   --groot-host 127.0.0.1 \
   --groot-port 5555 \
-  --repo-id local/fr3_gr00t_close_blender_lid_deploy \
+  --repo-id local/CloseBlenderLid_gr00t_realonly_nocasackpt \
   --num-episodes 1 \
   --task "Close the lid blender by securely placing the lid on top." \
-  --fps 5 \
+  --fps 20 \
   --action-chunk-size 4 \
   --async-inference \
   --prefetch-threshold 2 \
   --log-timing \
   --timing-log-interval 25 \
-  --home-config fr3_root_home_year2
+  --home-config fr3_root_home_robocasa
 ```
 
 Start with `--fps 5 --action-chunk-size 4 --async-inference`. If behavior is
