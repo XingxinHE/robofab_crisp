@@ -158,7 +158,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LEROBOT_HOME="${HF_LEROBOT_HOME:-${HOME}/.cache/huggingface/lerobot}"
+LEROBOT_HOME="${HF_LEROBOT_HOME:-${HF_HOME:-${HOME}/.cache/huggingface}/lerobot}"
 DATASET_PATH="${LEROBOT_HOME}/${REPO_ID}"
 if [[ -d "${DATASET_PATH}" && "${WANTS_RESUME}" -eq 0 ]]; then
   echo "[${PROFILE_NAME}] Dataset repo already exists: ${DATASET_PATH}" >&2

@@ -8,6 +8,63 @@ pixi run python dataset/00_crisp_to_lerobot_compatible.py \
   --dst-repo-id local/with_tray_combined_fix_feat  # duplicate dataset and fix it
 ```
 
+## Crop LeRobot Episodes
+
+Use `crop_lerobot_episodes.py` when a demonstration contains extra phases after
+the useful task completion, for example returning to release a tool after the
+button has already been pressed.
+
+Generate a crop template:
+
+```bash
+pixi run python dataset/crop_lerobot_episodes.py \
+  --source /data/huggingface/lerobot/local/UseToolTurnOnBlender_LeRobot \
+  --write-crop-template /tmp/usetool_turnon_crop_spec.csv
+```
+
+The crop spec uses exclusive `end_frame` values:
+
+```csv
+episode_index,start_frame,end_frame,length
+0,0,1500,2164
+1,0,1580,2300
+2,0,1320,1776
+```
+
+To identify frame indices, extract sampled frames from every episode and every
+video stream. The output image names preserve the original video frame index.
+Use the Python helper instead of a nested shell/JQ loop, since it reads
+`episodes.jsonl` directly and avoids accidentally mixing up `episode_index` and
+`length`.
+
+```bash
+pixi run python dataset/extract_lerobot_frame_samples.py \
+  --source /data/huggingface/lerobot/local/UseToolTurnOnBlender_LeRobot \
+  --output /tmp/usetool_turnon_frame_samples \
+  --step 100 \
+  --overwrite
+```
+
+The output is organized by video key and original episode index:
+
+```text
+/tmp/usetool_turnon_frame_samples/
+  observation.images.robot0_eye_in_hand/
+    episode_000000/
+      frame_000000.jpg
+      frame_000100.jpg
+      ...
+```
+
+Build the cropped dataset:
+
+```bash
+pixi run python dataset/crop_lerobot_episodes.py \
+  --source /data/huggingface/lerobot/local/UseToolTurnOnBlender_LeRobot \
+  --output /data/huggingface/lerobot/local/UseToolTurnOnBlender_LeRobot_cropped \
+  --crop-spec /tmp/usetool_turnon_crop_spec.csv
+```
+
 
 
 

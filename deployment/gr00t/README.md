@@ -12,7 +12,7 @@ uv run --group gr00t --extra cu128 python third_party/Isaac-GR00T/scripts/infere
   --server \
   --host 127.0.0.1 \
   --port 5555 \
-  --model-path /home/hex/Documents/github/playground/understand_crisp/gr00t/close_blender_lid/01_real_only_baseline/checkpoint-30000 \
+  --model-path /home/hex/Documents/github/playground/understand_crisp/gr00t/use_tool_turn_on_blender/01_real_only_baseline/checkpoint-30000 \
   --data-config panda_omron \
   --embodiment-tag new_embodiment \
   --denoising-steps 4
@@ -68,9 +68,9 @@ pixi run deploy-gr00t-fr3-3cams-gamepad -- \
   --groot-transport zmq \
   --groot-host 127.0.0.1 \
   --groot-port 5555 \
-  --repo-id local/CloseBlenderLid_gr00t_realonly_nocasackpt \
-  --num-episodes 1 \
-  --task "Close the lid blender by securely placing the lid on top." \
+  --repo-id local/UseToolTurnOnBlender_gr00t_realonly_casackpt_v2 \
+  --num-episodes 10 \
+  --task "Turn on the blender by grasping the green block to push the power button." \
   --fps 20 \
   --action-chunk-size 4 \
   --async-inference \

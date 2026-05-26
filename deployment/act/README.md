@@ -29,9 +29,9 @@ pixi run deploy-act-fr3-3cams-gamepad -- --repo-id local/with_tray_combined_fix_
 With a task/table-specific home:
 ```
 pixi run deploy-act-fr3-3cams-gamepad -- \
-  --repo-id local/with_tray_combined_fix_feat_deploy \
+  --repo-id local/CloseBlenderLid_act_realonly \
   --num-episodes 5 \
-  --model-path outputs/train/2026-05-01/00-46-38_act/checkpoints/050000/pretrained_model \
-  --home-config robots/fr3_root_home_year2.yaml \
-  --after-teleop robots/fr3_root_home_year2.yaml
+  --model-path /home/hex/Documents/github/playground/understand_crisp/robofab_crisp/outputs/train/2026-05-11/closeblenderlid_act/checkpoints/050000/pretrained_model \
+  --home-config robots/fr3_root_home_robocasa.yaml \
+  --after-teleop robots/fr3_root_home_robocasa.yaml
 ```
