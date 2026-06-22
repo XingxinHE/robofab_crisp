@@ -14,6 +14,7 @@ import logging
 import sys
 import threading
 import time
+from dataclasses import dataclass
 
 import numpy as np
 import rclpy
@@ -40,6 +41,35 @@ from teleoperations.gamepad.gamepad_6dof_interface import (
     XboxGamepad6Dof,
 )
 from teleoperations.gamepad.home_config import get_gamepad_home_config
+
+
+@dataclass(frozen=True)
+class RecordingLifecycle:
+    """Physical robot actions wrapped around recording state changes."""
+
+    name: str = "auto_home"
+    home_on_startup: bool = True
+    open_gripper_on_startup: bool = True
+    reset_env_on_episode_start: bool = True
+    open_gripper_on_episode_start: bool = True
+    home_on_episode_end: bool = True
+    open_gripper_on_episode_end: bool = True
+    home_on_exit: bool = True
+
+
+DEFAULT_RECORDING_LIFECYCLE = RecordingLifecycle()
+
+
+def _read_current_gripper_target(
+    env: ManipulatorCartesianEnv, fallback: float
+) -> float:
+    try:
+        value = env.gripper.value
+    except Exception:  # noqa: BLE001
+        value = None
+    if value is None:
+        value = fallback
+    return float(np.clip(value, 0.0, 1.0))
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,12 +152,15 @@ def print_mapping() -> None:
     print("  D-pad Down : exit recording manager")
 
 
-def main() -> int:
+def main(
+    lifecycle: RecordingLifecycle = DEFAULT_RECORDING_LIFECYCLE,
+) -> int:
     args = parse_args()
     setup_logging(level=args.log_level)
     logger = logging.getLogger(__name__)
     install_ros_recording_manager_shutdown_patch(logger)
 
+    logger.info("Recording lifecycle: %s", lifecycle.name)
     logger.info("Arguments:")
     for arg, value in vars(args).items():
         logger.info(f"{arg:<30}: {value}")
@@ -173,11 +206,14 @@ def main() -> int:
         assert isinstance(env, ManipulatorCartesianEnv)
 
         env.wait_until_ready()
-        env.home(
-            home_config=get_gamepad_home_config(
-                env, args.home_config, args.home_config_noise
+        if lifecycle.home_on_startup:
+            env.home(
+                home_config=get_gamepad_home_config(
+                    env, args.home_config, args.home_config_noise
+                )
             )
-        )
+        else:
+            logger.info("Skipping startup homing.")
         env.reset()
 
         features = get_features(env=env, ignore_keys=[])
@@ -230,13 +266,22 @@ def main() -> int:
             json.dump(env_metadata, f, indent=4)
 
         start_pose = env.robot.end_effector_pose
-        env.gripper.set_target(1.0)
+        if lifecycle.open_gripper_on_startup:
+            initial_gripper_target = 1.0
+            env.gripper.set_target(initial_gripper_target)
+            last_applied_gripper = None
+        else:
+            initial_gripper_target = _read_current_gripper_target(
+                env, gamepad.gripper_target
+            )
+            gamepad.gripper_target = initial_gripper_target
+            last_applied_gripper = initial_gripper_target
 
         teleop_state = TeleopState(
             lock=threading.Lock(),
             command_pose=start_pose.copy(),
-            command_gripper=1.0,
-            last_applied_gripper=None,
+            command_gripper=initial_gripper_target,
+            last_applied_gripper=last_applied_gripper,
         )
         data_fn = DirectTeleopDataFn(env=env, teleop_state=teleop_state)
 
@@ -320,23 +365,37 @@ def main() -> int:
         tasks = list(args.tasks)
 
         def on_start() -> None:
-            env.robot.reset_targets()
-            env.reset()
-            env.gripper.set_target(1.0)
+            if lifecycle.reset_env_on_episode_start:
+                env.robot.reset_targets()
+                env.reset()
+
+            if lifecycle.open_gripper_on_episode_start:
+                command_gripper = 1.0
+                env.gripper.set_target(command_gripper)
+                last_applied = None
+            else:
+                command_gripper = float(np.clip(gamepad.gripper_target, 0.0, 1.0))
+                last_applied = command_gripper
+
             current = env.robot.end_effector_pose
             with teleop_state.lock:
                 teleop_state.command_pose = current.copy()
-                teleop_state.command_gripper = 1.0
-                teleop_state.last_applied_gripper = None
+                teleop_state.command_gripper = command_gripper
+                teleop_state.last_applied_gripper = last_applied
             data_fn.reset()
 
         def on_end() -> None:
-            env.robot.reset_targets()
-            random_home = get_gamepad_home_config(
-                env, args.home_config, args.home_config_noise
-            )
-            env.robot.home(blocking=False, home_config=random_home)
-            env.gripper.open()
+            if lifecycle.home_on_episode_end:
+                env.robot.reset_targets()
+                random_home = get_gamepad_home_config(
+                    env, args.home_config, args.home_config_noise
+                )
+                env.robot.home(blocking=False, home_config=random_home)
+            else:
+                logger.info("Skipping episode-end homing.")
+
+            if lifecycle.open_gripper_on_episode_end:
+                env.gripper.open()
 
         with recording_manager:
             if recording_manager.done():
@@ -365,17 +424,20 @@ def main() -> int:
                     on_end=on_end,
                 )
 
-        logger.info("Homing follower.")
-        after_teleop_source = (
-            args.after_teleop if args.after_teleop is not None else args.home_config
-        )
-        final_home = get_gamepad_home_config(
-            env,
-            after_teleop_source,
-            args.home_config_noise,
-            config_key="after_teleop" if args.after_teleop is not None else None,
-        )
-        env.home(home_config=final_home)
+        if lifecycle.home_on_exit:
+            logger.info("Homing follower.")
+            after_teleop_source = (
+                args.after_teleop if args.after_teleop is not None else args.home_config
+            )
+            final_home = get_gamepad_home_config(
+                env,
+                after_teleop_source,
+                args.home_config_noise,
+                config_key="after_teleop" if args.after_teleop is not None else None,
+            )
+            env.home(home_config=final_home)
+        else:
+            logger.info("Skipping final homing.")
         logger.info("Finished recording.")
 
     except TimeoutError as exc:

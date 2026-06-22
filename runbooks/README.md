@@ -17,6 +17,7 @@ Teleop:
 
 Record:
 - `record-gamepad-fr3-3cams`
+- `record-gamepad-fr3-3cams-no-auto-home`
 - `record-gamepad-fr3`
 - `record-leader-follower-fr3-3cams`
 - `record-leader-follower-fr3-buttons-3cams`

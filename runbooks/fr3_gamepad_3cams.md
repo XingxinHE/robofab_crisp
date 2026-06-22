@@ -67,6 +67,18 @@ pixi run record-gamepad-fr3-3cams -- \
 This wrapper enforces `--fps 20` for the current collection baseline.
 Video codec remains CRISP/LeRobot default (`av1`) for now.
 
+For manually positioned starts, use the no-auto-home recorder:
+
+```bash
+pixi run record-gamepad-fr3-3cams-no-auto-home -- \
+  --repo-id local/fr3_gamepad_3cams_custom_start \
+  --tasks "open the microwave" \
+  --num-episodes 10
+```
+
+This variant does not home on startup, episode stop, or final exit. Teleop remains
+active while waiting, recording, and paused.
+
 Gamepad recording controls:
 - D-pad Up: record start/stop
 - D-pad Right: save
