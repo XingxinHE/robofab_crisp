@@ -65,6 +65,21 @@ pixi run python dataset/crop_lerobot_episodes.py \
   --crop-spec /tmp/usetool_turnon_crop_spec.csv
 ```
 
+## Merge LeRobot Episode Subsets Under One Task
+
+Use `merge_lerobot_same_task_subset.py` to take selected episodes from multiple
+LeRobot v2.1 datasets, renumber them densely, and assign one shared task
+description.
+
+```bash
+pixi run python dataset/merge_lerobot_same_task_subset.py \
+  --sources /data/huggingface/lerobot/local/ReachBlueButton \
+            /data/huggingface/lerobot/local/PressBlueButton \
+  --episode-counts 50 all \
+  --task-description "Reach and press the blue button." \
+  --output /data/huggingface/lerobot/local/ReachPressBlueButton_50_3
+```
+
 
 
 
