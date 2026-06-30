@@ -26,6 +26,7 @@ class Gamepad6DofConfig:
     roll_pitch_step: float = 0.02
     fine_scale: float = 0.4
     enable_roll_pitch: bool = True
+    b_button_quits: bool = True
 
 
 @dataclass
@@ -38,6 +39,7 @@ class GamepadCommand:
     yaw: float
     gripper_target: float
     should_quit: bool
+    b_pressed: bool
     sync_requested: bool
     recording_action: str | None
     coarse_mode: bool
@@ -81,6 +83,7 @@ class XboxGamepad6Dof:
             raise RuntimeError("Gamepad not initialized. Call start() first.")
 
         should_quit = False
+        b_pressed = False
         sync_requested = False
         recording_action: str | None = None
 
@@ -93,8 +96,10 @@ class XboxGamepad6Dof:
                     self.gripper_target = 0.0
                 elif event.button == 2:  # X -> open
                     self.gripper_target = 1.0
-                elif event.button == 1:  # B -> quit
-                    should_quit = True
+                elif event.button == 1:  # B
+                    b_pressed = True
+                    if self.cfg.b_button_quits:
+                        should_quit = True
                 elif event.button == 3:  # Y -> sync
                     sync_requested = True
                 elif event.button == 7:  # Start -> coarse/fine toggle
@@ -160,6 +165,7 @@ class XboxGamepad6Dof:
             yaw=yaw,
             gripper_target=self.gripper_target,
             should_quit=should_quit,
+            b_pressed=b_pressed,
             sync_requested=sync_requested,
             recording_action=recording_action,
             coarse_mode=self.coarse_mode,

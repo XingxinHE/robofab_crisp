@@ -55,6 +55,7 @@ class RecordingLifecycle:
     home_on_episode_end: bool = True
     open_gripper_on_episode_end: bool = True
     home_on_exit: bool = True
+    b_button_home_when_idle: bool = False
 
 
 DEFAULT_RECORDING_LIFECYCLE = RecordingLifecycle()
@@ -135,7 +136,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def print_mapping() -> None:
+def print_mapping(lifecycle: RecordingLifecycle) -> None:
     print("\nXbox mapping (gamepad recording mode):")
     print("  Left stick : XY translation")
     print("  LT / RT    : Z down / up")
@@ -143,7 +144,10 @@ def print_mapping() -> None:
     print("  Right stick: roll/pitch")
     print("  A / X      : close / open gripper")
     print("  Y          : sync target to current pose")
-    print("  B          : request exit")
+    if lifecycle.b_button_home_when_idle:
+        print("  B          : home when not recording")
+    else:
+        print("  B          : request exit")
     print("  Start      : coarse/fine mode")
     print("  Back       : toggle roll/pitch enable/disable")
     print("  D-pad Up   : record start/stop")
@@ -184,6 +188,7 @@ def main(
             yaw_step=args.yaw_step,
             roll_pitch_step=args.roll_pitch_step,
             enable_roll_pitch=args.enable_roll_pitch,
+            b_button_quits=not lifecycle.b_button_home_when_idle,
         )
     )
 
@@ -196,7 +201,7 @@ def main(
         logger.info(
             "Using controller[%d]: %s", args.controller_index, gamepad.get_name()
         )
-        print_mapping()
+        print_mapping(lifecycle)
 
         env = make_env(
             env_type=args.follower_config,
@@ -293,6 +298,31 @@ def main(
             record_pub.publish(msg)
             logger.info("Gamepad recording command: %s", action)
 
+        def home_if_idle() -> None:
+            if recording_manager.state == "recording":
+                logger.info("Ignoring B/home request while recording.")
+                return
+            if recording_manager.state == "exit":
+                logger.info("Ignoring B/home request while exiting.")
+                return
+
+            logger.info("Gamepad B: homing follower with --home-config.")
+            env.robot.reset_targets()
+            home_config = get_gamepad_home_config(
+                env, args.home_config, args.home_config_noise
+            )
+            env.home(home_config=home_config)
+            env.switch_to_default_controller()
+            current = env.robot.end_effector_pose
+            command_gripper = _read_current_gripper_target(
+                env, gamepad.gripper_target
+            )
+            gamepad.gripper_target = command_gripper
+            with teleop_state.lock:
+                teleop_state.command_pose = current.copy()
+                teleop_state.command_gripper = command_gripper
+                teleop_state.last_applied_gripper = command_gripper
+
         def teleop_loop() -> None:
             dt = 1.0 / max(args.teleop_rate_hz, 1.0)
             last_mode = gamepad.coarse_mode
@@ -304,6 +334,9 @@ def main(
 
                 if cmd.recording_action is not None:
                     publish_record_action(cmd.recording_action)
+
+                if cmd.b_pressed and lifecycle.b_button_home_when_idle:
+                    home_if_idle()
 
                 if cmd.should_quit:
                     publish_record_action("exit")

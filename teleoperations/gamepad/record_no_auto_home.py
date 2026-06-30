@@ -15,6 +15,7 @@ NO_AUTO_HOME_LIFECYCLE = RecordingLifecycle(
     home_on_episode_end=False,
     open_gripper_on_episode_end=False,
     home_on_exit=False,
+    b_button_home_when_idle=True,
 )
 
 
