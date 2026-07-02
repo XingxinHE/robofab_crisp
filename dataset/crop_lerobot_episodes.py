@@ -474,6 +474,98 @@ def compute_stats_from_table(
     return stats
 
 
+def estimate_num_samples(
+    dataset_len: int,
+    min_num_samples: int = 100,
+    max_num_samples: int = 10_000,
+    power: float = 0.75,
+) -> int:
+    if dataset_len <= 0:
+        raise ValueError(f"Cannot sample from empty video length: {dataset_len}")
+    if dataset_len < min_num_samples:
+        min_num_samples = dataset_len
+    return max(min_num_samples, min(int(dataset_len**power), max_num_samples))
+
+
+def sampled_frame_indices(frame_count: int) -> list[int]:
+    num_samples = estimate_num_samples(frame_count)
+    # Preserve order while removing any defensive duplicate from rounded linspace.
+    indices = np.round(np.linspace(0, frame_count - 1, num_samples)).astype(int)
+    return list(dict.fromkeys(int(index) for index in indices))
+
+
+def compute_video_stats(
+    path: Path,
+    frame_count: int,
+    feature: dict[str, Any],
+    timeout: float,
+) -> dict[str, Any]:
+    shape = feature.get("shape")
+    if not isinstance(shape, (list, tuple)) or len(shape) != 3:
+        raise ValueError(f"Expected video feature shape [height, width, channels], got: {shape}")
+
+    height, width, channels = [int(value) for value in shape]
+    if channels != 3:
+        raise ValueError(f"Expected RGB video feature with 3 channels, got: {shape}")
+
+    indices = sampled_frame_indices(frame_count)
+    select_expr = "+".join(f"eq(n\\,{index})" for index in indices)
+    cmd = [
+        "ffmpeg",
+        "-v",
+        "error",
+        "-i",
+        str(path),
+        "-an",
+        "-vf",
+        f"select={select_expr}",
+        "-vsync",
+        "0",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-",
+    ]
+    proc = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        timeout=timeout,
+    )
+
+    frame_bytes = height * width * channels
+    if len(proc.stdout) % frame_bytes != 0:
+        raise ValueError(
+            f"Decoded raw video byte count is not frame-aligned for {path}: "
+            f"{len(proc.stdout)} bytes, frame size {frame_bytes} bytes"
+        )
+
+    decoded_count = len(proc.stdout) // frame_bytes
+    if decoded_count != len(indices):
+        raise ValueError(
+            f"Decoded sample count mismatch for {path}: expected {len(indices)}, "
+            f"got {decoded_count}"
+        )
+
+    frames = np.frombuffer(proc.stdout, dtype=np.uint8).reshape(
+        decoded_count, height, width, channels
+    )
+    frames = frames.astype(np.float64) / 255.0
+    axes = (0, 1, 2)
+
+    def channel_stat(values: np.ndarray) -> list[Any]:
+        return values.reshape(channels, 1, 1).tolist()
+
+    return {
+        "mean": channel_stat(frames.mean(axis=axes)),
+        "std": channel_stat(frames.std(axis=axes)),
+        "min": channel_stat(frames.min(axis=axes)),
+        "max": channel_stat(frames.max(axis=axes)),
+        "count": [decoded_count],
+    }
+
+
 def accumulate_stats(
     accumulators: dict[str, list[Any]], table: pa.Table, features: dict[str, Any]
 ) -> None:
@@ -505,6 +597,56 @@ def compute_stats_from_arrays(
             "count": [int(arr.shape[0])],
         }
     return stats
+
+
+def aggregate_stats_from_episode_rows(
+    episode_stats_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    keys = sorted(
+        {
+            key
+            for row in episode_stats_rows
+            for key in row.get("stats", {})
+        }
+    )
+    aggregate: dict[str, Any] = {}
+    for key in keys:
+        stats_for_key = [
+            row["stats"][key]
+            for row in episode_stats_rows
+            if key in row.get("stats", {})
+        ]
+        counts = np.asarray([stats["count"] for stats in stats_for_key], dtype=np.float64)
+        total_count = counts.sum(axis=0)
+
+        means = np.asarray([stats["mean"] for stats in stats_for_key], dtype=np.float64)
+        variances = np.asarray(
+            [np.asarray(stats["std"], dtype=np.float64) ** 2 for stats in stats_for_key]
+        )
+        expanded_counts = counts
+        while expanded_counts.ndim < means.ndim:
+            expanded_counts = np.expand_dims(expanded_counts, axis=-1)
+
+        weighted_means = means * expanded_counts
+        total_mean = weighted_means.sum(axis=0) / total_count
+        delta_means = means - total_mean
+        weighted_variances = (variances + delta_means**2) * expanded_counts
+        total_variance = weighted_variances.sum(axis=0) / total_count
+
+        aggregate[key] = {
+            "mean": total_mean.tolist(),
+            "std": np.sqrt(total_variance).tolist(),
+            "min": np.min(
+                np.asarray([stats["min"] for stats in stats_for_key], dtype=np.float64),
+                axis=0,
+            ).tolist(),
+            "max": np.max(
+                np.asarray([stats["max"] for stats in stats_for_key], dtype=np.float64),
+                axis=0,
+            ).tolist(),
+            "count": total_count.astype(int).tolist(),
+        }
+    return aggregate
 
 
 def copy_static_metadata(source_root: Path, tmp_root: Path) -> None:
@@ -745,13 +887,21 @@ def build_cropped_dataset(
                 f"expected {crop.length}"
             )
 
+        episode_stats = compute_stats_from_table(table, features)
         for video_key in video_keys:
+            dst_video = video_path(source_info, tmp_root, new_episode_index, video_key)
             crop_video(
                 src_path=video_path(source_info, source_root, old_episode_index, video_key),
-                dst_path=video_path(source_info, tmp_root, new_episode_index, video_key),
+                dst_path=dst_video,
                 crop=crop,
                 fps=fps,
                 args=args,
+            )
+            episode_stats[video_key] = compute_video_stats(
+                path=dst_video,
+                frame_count=crop.length,
+                feature=features[video_key],
+                timeout=args.ffmpeg_timeout,
             )
 
         source_episode = source_episodes_by_index[old_episode_index]
@@ -763,7 +913,7 @@ def build_cropped_dataset(
         episode_stats_rows.append(
             {
                 "episode_index": new_episode_index,
-                "stats": compute_stats_from_table(table, features),
+                "stats": episode_stats,
             }
         )
         accumulate_stats(stats_accumulators, table, features)
@@ -786,9 +936,14 @@ def build_cropped_dataset(
     write_json(tmp_root / "meta" / "info.json", output_info)
     write_jsonl(tmp_root / "meta" / "episodes.jsonl", episode_rows)
     write_jsonl(tmp_root / "meta" / "episodes_stats.jsonl", episode_stats_rows)
+    global_stats = compute_stats_from_arrays(stats_accumulators, features)
+    video_stats = aggregate_stats_from_episode_rows(episode_stats_rows)
+    for video_key in video_keys:
+        if video_key in video_stats:
+            global_stats[video_key] = video_stats[video_key]
     write_json(
         tmp_root / "meta" / "stats.json",
-        compute_stats_from_arrays(stats_accumulators, features),
+        global_stats,
     )
     write_crop_manifest(tmp_root, source_root, crop_ranges, total_frames)
 
