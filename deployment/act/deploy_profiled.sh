@@ -9,6 +9,8 @@ PREFLIGHT_MODULE=""
 ENV_NAMESPACE=""
 USE_NAMESPACE_ARG="0"
 FORBID_ENV_NAMESPACE_ARG="0"
+RECORDING_MANAGER_TYPE="keyboard"
+NO_AUTO_HOME_DEFAULTS="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +37,11 @@ while [[ $# -gt 0 ]]; do
     --forbid-env-namespace-arg)
       FORBID_ENV_NAMESPACE_ARG="$2"
       shift 2
+      ;;
+    --no-auto-home-defaults)
+      NO_AUTO_HOME_DEFAULTS="1"
+      RECORDING_MANAGER_TYPE="ros"
+      shift
       ;;
     --)
       shift
@@ -68,11 +75,20 @@ Defaults:
   --policy-config lerobot_policy
   --env-config <auto-selected by ${PREFLIGHT_MODULE}>
   --env-namespace ${ENV_NAMESPACE:-<root>}
-  --recording-manager-type keyboard
+  --recording-manager-type ${RECORDING_MANAGER_TYPE}
   --fps 15
   --home-config <name-or-path>        Optional robot YAML or homes/*.yaml for deployment homing
   --after-teleop <name-or-path>       Optional final home after all deployment episodes
 EOF
+  if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
+    cat <<'EOF'
+No-auto-home gamepad mode:
+  --gamepad-idle-control is enabled
+  --no-auto-home is enabled
+  D-pad Up/Right/Left/Down controls rollout start-stop/save/delete/exit
+  gamepad teleop is active while rollout is not recording
+EOF
+  fi
   exit 0
 fi
 
@@ -188,15 +204,24 @@ echo "[${PROFILE_NAME}] Using model: ${MODEL_PATH}"
 echo "[${PROFILE_NAME}] Using env config: ${ENV_CONFIG}"
 echo "[${PROFILE_NAME}] Using env namespace: ${ENV_NAMESPACE:-<root>}"
 echo "[${PROFILE_NAME}] Recording deployment episodes to repo: ${REPO_ID}"
+if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
+  echo "[${PROFILE_NAME}] No-auto-home gamepad idle control enabled"
+fi
+
+PROFILE_DEFAULT_ARGS=()
+if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
+  PROFILE_DEFAULT_ARGS+=("--gamepad-idle-control" "--no-auto-home")
+fi
 
 exec python -m deployment.act.deploy_policy \
   --repo-id "${REPO_ID}" \
   --num-episodes "${NUM_EPISODES}" \
   --fps 15 \
-  --recording-manager-type keyboard \
+  --recording-manager-type "${RECORDING_MANAGER_TYPE}" \
   --path "${MODEL_PATH}" \
   --env-config "${ENV_CONFIG}" \
   --policy-config lerobot_policy \
   --env-namespace "${ENV_NAMESPACE}" \
   --log-level INFO \
+  "${PROFILE_DEFAULT_ARGS[@]}" \
   "${EXTRA_ARGS[@]}"
