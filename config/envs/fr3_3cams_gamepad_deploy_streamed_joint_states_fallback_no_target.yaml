@@ -1,0 +1,24 @@
+control_frequency: 15.0
+gripper_mode: "absolute_continuous"
+max_episode_steps: 1500
+
+observations_to_include_to_state:
+  - observation.state.cartesian
+  - observation.state.gripper
+  - observation.state.joints
+
+cartesian_control_param_config: null
+joint_control_param_config: null
+
+robot_config:
+  from_yaml: robots/fr3_root_home_lab.yaml
+
+gripper_config:
+  from_yaml: grippers/fr3_root_normalized_joint_states_fallback.yaml
+
+camera_configs:
+  - from_yaml: cameras/robot0_eye_in_hand_256.yaml
+  - from_yaml: cameras/robot0_agentview_left_256.yaml
+  - from_yaml: cameras/robot0_agentview_right_256.yaml
+
+sensor_configs: []
