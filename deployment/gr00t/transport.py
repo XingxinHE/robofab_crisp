@@ -1,7 +1,12 @@
 """GR00T inference transport clients.
 
-The ZMQ protocol mirrors Isaac-GR00T's ``gr00t.eval.service`` implementation:
-requests are Torch-serialized dicts with an endpoint name and optional data.
+The legacy ZMQ protocol (used by GR00T N1.5) mirrors Isaac-GR00T's older
+``gr00t.eval.service`` implementation: requests are Torch-serialized dicts with
+an endpoint name and optional data.
+
+The N1.7 ZMQ protocol (``zmq1p7``) uses ``msgpack_numpy`` serialization and the
+endpoint-based request format from ``gr00t.policy.server_client``.
+
 This keeps CRISP deployment independent from the Isaac-GR00T Python package.
 """
 
@@ -11,13 +16,16 @@ from io import BytesIO
 from typing import Any, Literal, Protocol
 
 import json_numpy
+import msgpack
+import msgpack_numpy as mnp
+import numpy as np
 import requests
 import torch
 
 
 json_numpy.patch()
 
-GrootTransport = Literal["http", "zmq"]
+GrootTransport = Literal["http", "zmq", "zmq1p7"]
 
 
 class Gr00tInferenceClient(Protocol):
@@ -70,6 +78,8 @@ class HttpGr00tClient:
 
 
 class ZmqGr00tClient:
+    """Legacy Torch-serialized ZMQ client for GR00T N1.5 servers."""
+
     def __init__(
         self,
         *,
@@ -142,8 +152,93 @@ class ZmqGr00tClient:
                 f"after {self.timeout_ms / 1000:.1f}s."
             ) from exc
 
-        if "error" in response:
+        if isinstance(response, dict) and "error" in response:
             raise RuntimeError(f"GR00T ZMQ server error: {response['error']}")
+        return response
+
+
+class Zmq1p7Gr00tClient:
+    """msgpack_numpy ZMQ client for GR00T N1.7 ``PolicyServer``."""
+
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        timeout_sec: float,
+        api_token: str | None = None,
+    ) -> None:
+        try:
+            import zmq
+        except ImportError as exc:
+            raise ImportError(
+                "pyzmq is required for --groot-transport zmq1p7. "
+                "Run `pixi install` in robofab_crisp after pulling this change."
+            ) from exc
+
+        self.zmq = zmq
+        self.host = host
+        self.port = port
+        self.timeout_ms = int(timeout_sec * 1000)
+        self.api_token = api_token
+        self.context = zmq.Context()
+        self.socket = None
+        self._init_socket()
+
+    def _init_socket(self) -> None:
+        if self.socket is not None:
+            self.socket.close(linger=0)
+
+        self.socket = self.context.socket(self.zmq.REQ)
+        self.socket.setsockopt(self.zmq.RCVTIMEO, self.timeout_ms)
+        self.socket.setsockopt(self.zmq.SNDTIMEO, self.timeout_ms)
+        self.socket.setsockopt(self.zmq.LINGER, 0)
+        self.socket.connect(f"tcp://{self.host}:{self.port}")
+
+    def check_health(self) -> None:
+        response = self._call_endpoint("ping", requires_input=False)
+        if isinstance(response, dict) and response.get("status") != "ok":
+            raise RuntimeError(f"GR00T N1.7 ZMQ health check failed: {response}")
+
+    def get_action(self, observation: dict[str, Any]) -> dict[str, Any]:
+        return self._call_endpoint(
+            "get_action",
+            data={"observation": observation, "options": {}},
+        )
+
+    def close(self) -> None:
+        if self.socket is not None:
+            self.socket.close(linger=0)
+            self.socket = None
+        self.context.term()
+
+    def _call_endpoint(
+        self,
+        endpoint: str,
+        data: dict[str, Any] | None = None,
+        requires_input: bool = True,
+    ) -> dict[str, Any]:
+        if self.socket is None:
+            self._init_socket()
+
+        request: dict[str, Any] = {"endpoint": endpoint}
+        if requires_input:
+            request["data"] = data or {}
+        if self.api_token:
+            request["api_token"] = self.api_token
+
+        try:
+            self.socket.send(_msgpack_to_bytes(request))
+            response = _msgpack_from_bytes(self.socket.recv())
+        except self.zmq.Again as exc:
+            self._init_socket()
+            raise TimeoutError(
+                f"Timed out waiting for GR00T N1.7 ZMQ endpoint {endpoint!r} "
+                f"after {self.timeout_ms / 1000:.1f}s."
+            ) from exc
+
+        if isinstance(response, dict) and "error" in response:
+            raise RuntimeError(f"GR00T N1.7 ZMQ server error: {response['error']}")
         return response
 
 
@@ -165,6 +260,13 @@ def make_groot_client(
             timeout_sec=timeout_sec,
             api_token=api_token,
         )
+    if transport == "zmq1p7":
+        return Zmq1p7Gr00tClient(
+            host=host,
+            port=port,
+            timeout_sec=timeout_sec,
+            api_token=api_token,
+        )
     raise ValueError(f"Unsupported GR00T transport: {transport!r}")
 
 
@@ -177,3 +279,22 @@ def _torch_to_bytes(data: dict[str, Any]) -> bytes:
 def _torch_from_bytes(data: bytes) -> dict[str, Any]:
     buffer = BytesIO(data)
     return torch.load(buffer, weights_only=False)
+
+
+def _msgpack_to_bytes(data: dict[str, Any]) -> bytes:
+    """Serialize with msgpack_numpy. Refuses object-dtype ndarrays for safety."""
+
+    def _encode(obj: Any) -> Any:
+        if isinstance(obj, np.ndarray):
+            if obj.dtype.kind == "O":
+                raise TypeError(
+                    f"Refusing to encode object-dtype ndarray (shape={obj.shape}); "
+                    "convert to a concrete numeric dtype before sending."
+                )
+        return mnp.encode(obj)
+
+    return msgpack.packb(data, default=_encode)
+
+
+def _msgpack_from_bytes(data: bytes) -> dict[str, Any]:
+    return msgpack.unpackb(data, object_hook=mnp.decode, raw=False)
