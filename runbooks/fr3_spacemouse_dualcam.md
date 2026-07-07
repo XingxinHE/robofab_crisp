@@ -15,8 +15,8 @@ Realtime PC (`module_run_on_RT_pc/pixi_franka_ros2`):
 
 ```bash
 pixi run zenoh-router
-pixi run -e humble franka robot_ip:=172.16.0.3 load_gripper:=true controllers_yaml:=config/controllers.yaml
-pixi run -e humble ros2 control switch_controllers --activate cartesian_impedance_controller
+pixi run -e jazzy franka robot_ip:=172.16.0.3 load_gripper:=true controllers_yaml:=config/controllers.yaml
+pixi run -e jazzy ros2 control switch_controllers --activate cartesian_impedance_controller
 ```
 
 SpaceMouse recording publisher (`pixi_franka_spacemouse`):

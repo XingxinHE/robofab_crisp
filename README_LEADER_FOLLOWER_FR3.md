@@ -32,7 +32,7 @@ pixi run zenoh-router
 
 ```bash
 # terminal 1
-pixi run -e humble franka-dual \
+pixi run -e jazzy franka-dual \
   leader_robot_ip:=172.16.0.33 \
   follower_robot_ip:=172.16.0.3 \
   leader_namespace:=left \
@@ -45,7 +45,7 @@ Switch follower to cartesian controller:
 
 ```bash
 # terminal 2
-pixi run -e humble ros2 control switch_controllers \
+pixi run -e jazzy ros2 control switch_controllers \
   --controller-manager /right/controller_manager \
   --activate cartesian_impedance_controller
 ```
@@ -53,9 +53,9 @@ pixi run -e humble ros2 control switch_controllers \
 Optional checks:
 
 ```bash
-pixi run -e humble ros2 topic list | grep -E '^/(left|right)/'
-pixi run -e humble ros2 topic echo /left/current_pose --once
-pixi run -e humble ros2 topic echo /right/current_pose --once
+pixi run -e jazzy ros2 topic list | grep -E '^/(left|right)/'
+pixi run -e jazzy ros2 topic echo /left/current_pose --once
+pixi run -e jazzy ros2 topic echo /right/current_pose --once
 ```
 
 ## 2) Teleop test (`robofab_crisp`)
