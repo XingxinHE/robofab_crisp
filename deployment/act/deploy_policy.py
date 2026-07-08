@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import crisp_gym  # noqa: F401
 import numpy as np
@@ -123,6 +124,16 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Let B manually home the robot while rollout is not recording.",
     )
+    parser.add_argument(
+        "--clamp-state-gripper-zero",
+        action="store_true",
+        default=False,
+        help=(
+            "Force observation.state.gripper and observation.state[6] to 0.0 "
+            "before ACT inference and recording. Intended for no-target reach "
+            "debugging when a tiny real gripper offset is out of distribution."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -220,6 +231,40 @@ def home_after_deployment(
         home_config_noise,
         config_key="after_teleop" if after_teleop is not None else None,
     )
+
+
+def _zero_like_observation_value(value: Any, clamp_value: float) -> Any:
+    if isinstance(value, np.ndarray):
+        return np.full_like(value, clamp_value)
+    if isinstance(value, np.generic):
+        return np.asarray(clamp_value, dtype=value.dtype)[()]
+    return np.float32(clamp_value)
+
+
+def install_gripper_state_clamp(env: ManipulatorBaseEnv, value: float = 0.0) -> None:
+    """Patch env.get_obs so ACT sees a fixed open gripper state.
+
+    The reach-only sim policies were trained with an effectively constant open
+    gripper observation. Real hardware can report tiny nonzero offsets that are
+    huge after mean/std normalization, so this deployment-only shim lets us test
+    the hypothesis without changing datasets or checkpoints.
+    """
+
+    original_get_obs = env.get_obs
+
+    def get_obs_with_clamped_gripper() -> dict[str, Any]:
+        obs = original_get_obs()
+        key = "observation.state.gripper"
+        if key in obs:
+            obs[key] = _zero_like_observation_value(obs[key], value)
+        state = obs.get("observation.state")
+        if isinstance(state, np.ndarray) and state.shape[0] > 6:
+            state = state.copy()
+            state[6] = np.asarray(value, dtype=state.dtype)
+            obs["observation.state"] = state
+        return obs
+
+    env.get_obs = get_obs_with_clamped_gripper  # type: ignore[method-assign]
 
 
 def _read_current_gripper_target(env: ManipulatorBaseEnv, fallback: float) -> float:
@@ -444,6 +489,12 @@ def main() -> int:
         env = make_env(
             args.env_config, control_type=ctrl_type, namespace=args.env_namespace
         )
+        if args.clamp_state_gripper_zero:
+            logger.warning(
+                "Clamping observation.state.gripper and observation.state[6] to 0.0 "
+                "before ACT inference."
+            )
+            install_gripper_state_clamp(env, value=0.0)
 
         features = get_features(env)
         evaluator = Evaluator(output_file="eval/" + evaluation_file)

@@ -11,6 +11,7 @@ USE_NAMESPACE_ARG="0"
 FORBID_ENV_NAMESPACE_ARG="0"
 RECORDING_MANAGER_TYPE="keyboard"
 NO_AUTO_HOME_DEFAULTS="0"
+CLAMP_STATE_GRIPPER_ZERO_DEFAULTS="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +42,10 @@ while [[ $# -gt 0 ]]; do
     --no-auto-home-defaults)
       NO_AUTO_HOME_DEFAULTS="1"
       RECORDING_MANAGER_TYPE="ros"
+      shift
+      ;;
+    --clamp-state-gripper-zero-defaults)
+      CLAMP_STATE_GRIPPER_ZERO_DEFAULTS="1"
       shift
       ;;
     --)
@@ -79,6 +84,7 @@ Defaults:
   --fps 15
   --home-config <name-or-path>        Optional robot YAML or homes/*.yaml for deployment homing
   --after-teleop <name-or-path>       Optional final home after all deployment episodes
+  --clamp-state-gripper-zero          Clamp ACT observation gripper state to 0.0
 EOF
   if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
     cat <<'EOF'
@@ -207,10 +213,16 @@ echo "[${PROFILE_NAME}] Recording deployment episodes to repo: ${REPO_ID}"
 if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
   echo "[${PROFILE_NAME}] No-auto-home gamepad idle control enabled"
 fi
+if [[ "${CLAMP_STATE_GRIPPER_ZERO_DEFAULTS}" == "1" ]]; then
+  echo "[${PROFILE_NAME}] Gripper state observation clamp enabled"
+fi
 
 PROFILE_DEFAULT_ARGS=()
 if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
   PROFILE_DEFAULT_ARGS+=("--gamepad-idle-control" "--no-auto-home")
+fi
+if [[ "${CLAMP_STATE_GRIPPER_ZERO_DEFAULTS}" == "1" ]]; then
+  PROFILE_DEFAULT_ARGS+=("--clamp-state-gripper-zero")
 fi
 
 exec python -m deployment.act.deploy_policy \
