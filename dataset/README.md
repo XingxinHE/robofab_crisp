@@ -71,6 +71,13 @@ Use `merge_lerobot_same_task_subset.py` to take selected episodes from multiple
 LeRobot v2.1 datasets, renumber them densely, and assign one shared task
 description.
 
+By default, the script uses strict schema checking and requires identical
+parquet columns. Use `--state-schema crisp14_no_target` when merging the current
+Reach/Press blue-button datasets: it rewrites `observation.state` to the 14D
+CRISP no-target layout `[cartesian, gripper, joints]`, drops
+`observation.state.target`, and recomputes episode stats from the rewritten
+parquets.
+
 ```bash
 pixi run python dataset/merge_lerobot_same_task_subset.py \
   --sources /data/huggingface/lerobot/local/ReachBlueButton \
@@ -78,6 +85,19 @@ pixi run python dataset/merge_lerobot_same_task_subset.py \
   --episode-counts 50 all \
   --task-description "Reach and press the blue button." \
   --output /data/huggingface/lerobot/local/ReachPressBlueButton_50_3
+```
+
+Current v3 no-target sim+real merge:
+
+```bash
+pixi run python dataset/merge_lerobot_same_task_subset.py \
+  --sources /data/huggingface/lerobot/gs_source/ReachBlueButton_v3_sim_110_gripper0_notarget \
+            /data/huggingface/lerobot/gs_source/PressBlueButton_v3_no_back_up \
+  --episode-counts all all \
+  --task-description "Reach and press the blue button." \
+  --state-schema crisp14_no_target \
+  --output /data/huggingface/lerobot/gs_source/ReachPressBlueButton_v3_sim110_real_8 \
+  --overwrite
 ```
 
 
