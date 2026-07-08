@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Xingxin HE <xingxin.he@connect.ust.hk>"]
-channels = ["robostack-humble", "conda-forge"]
+channels = ["robostack-jazzy", "conda-forge"]
 name = "robofab_crisp"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -51,13 +51,13 @@ gripper-align-check = "python analysis/gripper_alignment_check.py"
 episode-playback = "python analysis/episode_robot_playback.py"
 
 [dependencies]
-python = ">=3.11,<3.12"
-ros-humble-desktop = ">=0.10.0,<0.11"
+python = ">=3.12,<3.13"
+ros-jazzy-desktop = ">=0.11.0,<0.12"
 colcon-common-extensions = ">=0.3.0,<0.4"
-ros-humble-ros2-control = ">=2.51.0,<3"
-ros-humble-ros2-controllers = ">=2.48.0,<3"
-ros-humble-image-transport-plugins = ">=2.5.3,<3"
-ros-humble-rmw-zenoh-cpp = ">=0.1.2,<0.2"
+ros-jazzy-ros2-control = ">=4.45.1,<5"
+ros-jazzy-ros2-controllers = ">=4.40.0,<5"
+ros-jazzy-image-transport-plugins = ">=4.0.7,<5"
+ros-jazzy-rmw-zenoh-cpp = ">=0.2.9,<0.3"
 numpy = "<2"
 scipy = ">=1.15.2,<2"
 pynput = "*"
@@ -68,7 +68,7 @@ cmake = "*"
 pkg-config = "*"
 make = "*"
 ninja = "*"
-ros-humble-rqt-gui = ">=1.1.7,<2"
+ros-jazzy-rqt-gui = ">=1.6.3,<2"
 
 [pypi-dependencies]
 torch = { version = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" }

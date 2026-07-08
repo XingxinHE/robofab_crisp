@@ -21,7 +21,7 @@ pixi run zenoh-router
 
 ```bash
 # terminal 1
-pixi run -e humble franka \
+pixi run -e jazzy franka \
   robot_ip:=172.16.0.3 \
   load_gripper:=true \
   controllers_yaml:=config/controllers.yaml
@@ -29,7 +29,7 @@ pixi run -e humble franka \
 
 ```bash
 # terminal 2
-pixi run -e humble ros2 control switch_controllers --activate cartesian_impedance_controller
+pixi run -e jazzy ros2 control switch_controllers --activate cartesian_impedance_controller
 ```
 
 ## 2) Camera bringup (camera PC)
