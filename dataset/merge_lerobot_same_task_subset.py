@@ -27,6 +27,43 @@ import pandas as pd
 
 
 VIDEO_DTYPE = "video"
+STATE_SCHEMA_STRICT = "strict"
+STATE_SCHEMA_CRISP14_NO_TARGET = "crisp14_no_target"
+
+CRISP14_STATE_NAMES = [
+    "x",
+    "y",
+    "z",
+    "roll",
+    "pitch",
+    "yaw",
+    "gripper",
+    "joint_0",
+    "joint_1",
+    "joint_2",
+    "joint_3",
+    "joint_4",
+    "joint_5",
+    "joint_6",
+]
+CRISP14_REQUIRED_INPUT_COLUMNS = [
+    "observation.state.cartesian",
+    "observation.state.gripper",
+    "observation.state.joints",
+    "action",
+]
+CRISP14_OUTPUT_COLUMNS = [
+    "observation.state.cartesian",
+    "observation.state.gripper",
+    "observation.state.joints",
+    "observation.state",
+    "action",
+    "timestamp",
+    "frame_index",
+    "episode_index",
+    "index",
+    "task_index",
+]
 
 
 @dataclass(frozen=True)
@@ -87,6 +124,16 @@ def parse_args() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Replace an existing output dataset after a temporary build succeeds.",
+    )
+    parser.add_argument(
+        "--state-schema",
+        choices=[STATE_SCHEMA_STRICT, STATE_SCHEMA_CRISP14_NO_TARGET],
+        default=STATE_SCHEMA_STRICT,
+        help=(
+            "State schema policy. 'strict' requires identical source parquet "
+            "columns. 'crisp14_no_target' rewrites CRISP state to "
+            "[cartesian, gripper, joints] and drops observation.state.target."
+        ),
     )
     parser.add_argument(
         "--verify-load",
@@ -233,7 +280,52 @@ def validate_output_path(output_root: Path, source_roots: list[Path]) -> None:
             raise ValueError("Output dataset path must not be inside a source dataset.")
 
 
-def validate_sources(sources: list[SourceDataset]) -> None:
+def source_state_dim(source: SourceDataset) -> int | None:
+    shape = source.info.get("features", {}).get("observation.state", {}).get("shape")
+    if not shape:
+        return None
+    return int(shape[0])
+
+
+def video_codec_by_key(source: SourceDataset) -> dict[str, str | None]:
+    codecs: dict[str, str | None] = {}
+    features = source.info.get("features", {})
+    for key in source.video_keys:
+        feature = features.get(key, {})
+        codecs[key] = (
+            feature.get("video_info", {}).get("video.codec")
+            or feature.get("info", {}).get("video.codec")
+        )
+    return codecs
+
+
+def validate_crisp14_source(source: SourceDataset) -> None:
+    state_dim = source_state_dim(source)
+    if state_dim not in {14, 20}:
+        raise ValueError(
+            f"{source.root}: --state-schema {STATE_SCHEMA_CRISP14_NO_TARGET} "
+            f"requires observation.state shape [14] or [20], got {state_dim!r}."
+        )
+    if state_dim == 20 and "observation.state.target" not in source.parquet_columns:
+        raise ValueError(
+            f"{source.root}: 20D state source is missing observation.state.target."
+        )
+
+    action_shape = source.info.get("features", {}).get("action", {}).get("shape")
+    if action_shape != [7]:
+        raise ValueError(f"{source.root}: expected 7D action feature, got {action_shape!r}.")
+
+    missing_columns = sorted(set(CRISP14_REQUIRED_INPUT_COLUMNS) - set(source.parquet_columns))
+    if missing_columns:
+        raise ValueError(
+            f"{source.root}: required CRISP14 input columns missing from parquet: "
+            f"{missing_columns}"
+        )
+
+
+def validate_sources(
+    sources: list[SourceDataset], state_schema: str = STATE_SCHEMA_STRICT
+) -> None:
     ref = sources[0]
     checks = ["fps", "chunks_size", "data_path", "video_path", "robot_type"]
     for source in sources[1:]:
@@ -248,6 +340,16 @@ def validate_sources(sources: list[SourceDataset]) -> None:
                 f"{source.root}: video keys {source.video_keys} do not match "
                 f"{ref.root}: {ref.video_keys}."
             )
+
+    if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET:
+        for source in sources:
+            validate_crisp14_source(source)
+        return
+
+    if state_schema != STATE_SCHEMA_STRICT:
+        raise ValueError(f"Unsupported state schema: {state_schema}")
+
+    for source in sources[1:]:
         if source.parquet_columns != ref.parquet_columns:
             raise ValueError(
                 f"{source.root}: parquet columns do not match {ref.root}.\n"
@@ -327,6 +429,28 @@ def stats_for_array(values: np.ndarray) -> dict[str, list[Any]]:
     }
 
 
+def series_to_stats_array(series: pd.Series) -> np.ndarray:
+    rows: list[np.ndarray] = []
+    for value in series:
+        arr = np.asarray(value)
+        if arr.ndim == 0:
+            arr = arr.reshape(1)
+        else:
+            arr = arr.reshape(-1)
+        rows.append(arr)
+    if not rows:
+        raise ValueError(f"Cannot compute stats for empty column {series.name!r}.")
+
+    widths = {row.shape[0] for row in rows}
+    if len(widths) != 1:
+        raise ValueError(f"{series.name}: inconsistent row widths for stats: {sorted(widths)}")
+    return np.stack(rows, axis=0)
+
+
+def stats_for_dataframe(df: pd.DataFrame) -> dict[str, Any]:
+    return {column: stats_for_array(series_to_stats_array(df[column])) for column in df.columns}
+
+
 def patched_episode_stats(
     source_stats: dict[str, Any],
     new_episode_index: int,
@@ -350,6 +474,83 @@ def patched_episode_stats(
     return {"episode_index": new_episode_index, "stats": stats}
 
 
+def crisp14_episode_stats(
+    source_stats: dict[str, Any],
+    rewritten_stats: dict[str, Any],
+    video_keys: list[str],
+    new_episode_index: int,
+    source_root: Path,
+    source_episode_index: int,
+) -> dict[str, Any]:
+    stats = {}
+    raw_source_stats = source_stats.get("stats", {})
+    missing_video_stats = sorted(set(video_keys) - set(raw_source_stats))
+    if missing_video_stats:
+        raise ValueError(
+            f"{source_root} episode {source_episode_index}: missing video stats for "
+            f"{missing_video_stats}."
+        )
+
+    for video_key in video_keys:
+        stats[video_key] = copy.deepcopy(raw_source_stats[video_key])
+    stats.update(rewritten_stats)
+    stats.pop("observation.state.target", None)
+    return {"episode_index": new_episode_index, "stats": stats}
+
+
+def as_flat_float_array(value: Any, column: str, expected_length: int) -> np.ndarray:
+    arr = np.asarray(value, dtype=np.float32)
+    if arr.ndim == 0:
+        arr = arr.reshape(1)
+    else:
+        arr = arr.reshape(-1)
+    if arr.shape[0] != expected_length:
+        raise ValueError(
+            f"{column}: expected length {expected_length}, got {arr.shape[0]}."
+        )
+    return arr
+
+
+def rebuild_crisp14_state(df: pd.DataFrame) -> list[np.ndarray]:
+    states: list[np.ndarray] = []
+    for _, row in df.iterrows():
+        cartesian = as_flat_float_array(
+            row["observation.state.cartesian"],
+            "observation.state.cartesian",
+            6,
+        )
+        gripper = as_flat_float_array(
+            row["observation.state.gripper"],
+            "observation.state.gripper",
+            1,
+        )
+        joints = as_flat_float_array(
+            row["observation.state.joints"],
+            "observation.state.joints",
+            7,
+        )
+        states.append(np.concatenate([cartesian, gripper, joints]).astype(np.float32))
+    return states
+
+
+def normalize_crisp14_dataframe(df: pd.DataFrame, src: Path) -> pd.DataFrame:
+    missing_columns = sorted(set(CRISP14_REQUIRED_INPUT_COLUMNS) - set(df.columns))
+    if missing_columns:
+        raise ValueError(f"{src}: missing columns: {missing_columns}")
+
+    output = df.loc[
+        :,
+        [
+            "observation.state.cartesian",
+            "observation.state.gripper",
+            "observation.state.joints",
+            "action",
+        ],
+    ].copy()
+    output["observation.state"] = rebuild_crisp14_state(output)
+    return output
+
+
 def rewrite_parquet(
     source: SourceDataset,
     source_episode_index: int,
@@ -357,16 +558,20 @@ def rewrite_parquet(
     new_episode_index: int,
     global_frame_start: int,
     columns: list[str],
-) -> int:
+    state_schema: str,
+) -> tuple[int, dict[str, Any]]:
     src = data_path(source.info, source.root, source_episode_index)
     if not src.exists():
         raise FileNotFoundError(f"Missing source parquet: {src}")
 
     df = pd.read_parquet(src)
-    missing_columns = sorted(set(columns) - set(df.columns))
-    if missing_columns:
-        raise ValueError(f"{src}: missing columns: {missing_columns}")
-    df = df.loc[:, columns].copy()
+    if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET:
+        df = normalize_crisp14_dataframe(df, src)
+    else:
+        missing_columns = sorted(set(columns) - set(df.columns))
+        if missing_columns:
+            raise ValueError(f"{src}: missing columns: {missing_columns}")
+        df = df.loc[:, columns].copy()
 
     length = len(df)
     frame_index = np.arange(length, dtype=np.int64)
@@ -377,11 +582,17 @@ def rewrite_parquet(
     df["episode_index"] = np.full(length, new_episode_index, dtype=np.int64)
     df["index"] = np.arange(global_frame_start, global_frame_start + length, dtype=np.int64)
     df["task_index"] = np.zeros(length, dtype=np.int64)
+    df = df.loc[:, columns]
 
     dst = data_path(source.info, dst_root, new_episode_index)
     dst.parent.mkdir(parents=True, exist_ok=True)
+    stats = (
+        stats_for_dataframe(df)
+        if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET
+        else {}
+    )
     df.to_parquet(dst, index=False)
-    return length
+    return length, stats
 
 
 def normalize_video_fps(info: dict[str, Any]) -> None:
@@ -398,8 +609,22 @@ def make_output_info(
     total_episodes: int,
     total_frames: int,
     total_videos: int,
+    state_schema: str,
 ) -> dict[str, Any]:
     output_info = copy.deepcopy(reference_info)
+    if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET:
+        features = output_info.setdefault("features", {})
+        features.pop("observation.state.target", None)
+        state_feature = copy.deepcopy(features.get("observation.state", {}))
+        state_feature.update(
+            {
+                "dtype": "float32",
+                "shape": [14],
+                "names": CRISP14_STATE_NAMES,
+            }
+        )
+        features["observation.state"] = state_feature
+
     chunks_size = int(output_info["chunks_size"])
     output_info["total_episodes"] = total_episodes
     output_info["total_frames"] = total_frames
@@ -432,10 +657,12 @@ def write_manifest(
     counts: list[int | None],
     task_description: str,
     total_frames: int,
+    state_schema: str,
 ) -> None:
     write_json(
         dst_root / "meta" / "merge_manifest.json",
         {
+            "state_schema": state_schema,
             "sources": [
                 {
                     "source_index": index,
@@ -444,6 +671,8 @@ def write_manifest(
                     if counts[index] is None
                     else counts[index],
                     "source_task_rows": source.tasks,
+                    "observation_state_dim": source_state_dim(source),
+                    "video_codecs": video_codec_by_key(source),
                 }
                 for index, source in enumerate(sources)
             ],
@@ -470,9 +699,14 @@ def build_dataset(
     dst_root: Path,
     task_description: str,
     counts: list[int | None],
+    state_schema: str = STATE_SCHEMA_STRICT,
 ) -> tuple[int, int, int]:
     reference = sources[0]
-    columns = reference.parquet_columns
+    columns = (
+        CRISP14_OUTPUT_COLUMNS
+        if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET
+        else reference.parquet_columns
+    )
     video_keys = reference.video_keys
     dst_root.mkdir(parents=True, exist_ok=False)
     copy_empty_image_dirs(sources, dst_root)
@@ -483,13 +717,14 @@ def build_dataset(
 
     for episode in selected:
         source = sources[episode.source_index]
-        actual_length = rewrite_parquet(
+        actual_length, rewritten_stats = rewrite_parquet(
             source=source,
             source_episode_index=episode.source_episode_index,
             dst_root=dst_root,
             new_episode_index=episode.new_episode_index,
             global_frame_start=total_frames,
             columns=columns,
+            state_schema=state_schema,
         )
         if actual_length != episode.length:
             raise ValueError(
@@ -521,16 +756,28 @@ def build_dataset(
                 "length": episode.length,
             }
         )
-        source_stats = source.episode_stats[episode.source_episode_index]
-        stats_rows.append(
-            patched_episode_stats(
-                source_stats=source_stats,
-                new_episode_index=episode.new_episode_index,
-                global_frame_start=total_frames,
-                length=episode.length,
-                fps=source.info["fps"],
+        if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET:
+            stats_rows.append(
+                crisp14_episode_stats(
+                    source_stats=source.episode_stats[episode.source_episode_index],
+                    rewritten_stats=rewritten_stats,
+                    video_keys=video_keys,
+                    new_episode_index=episode.new_episode_index,
+                    source_root=source.root,
+                    source_episode_index=episode.source_episode_index,
+                )
             )
-        )
+        else:
+            source_stats = source.episode_stats[episode.source_episode_index]
+            stats_rows.append(
+                patched_episode_stats(
+                    source_stats=source_stats,
+                    new_episode_index=episode.new_episode_index,
+                    global_frame_start=total_frames,
+                    length=episode.length,
+                    fps=source.info["fps"],
+                )
+            )
         total_frames += episode.length
 
     total_videos = len(selected) * len(video_keys)
@@ -539,6 +786,7 @@ def build_dataset(
         total_episodes=len(selected),
         total_frames=total_frames,
         total_videos=total_videos,
+        state_schema=state_schema,
     )
     write_json(dst_root / "meta" / "info.json", output_info)
     write_jsonl(
@@ -554,6 +802,7 @@ def build_dataset(
         counts=counts,
         task_description=task_description,
         total_frames=total_frames,
+        state_schema=state_schema,
     )
     return len(selected), total_frames, total_videos
 
@@ -631,7 +880,7 @@ def main() -> int:
 
     counts = [parse_count(raw) for raw in args.episode_counts]
     sources = [load_source(root) for root in source_roots]
-    validate_sources(sources)
+    validate_sources(sources, state_schema=args.state_schema)
     selected = select_episodes(sources, counts)
     if not selected:
         raise ValueError("No episodes selected.")
@@ -656,6 +905,7 @@ def main() -> int:
             dst_root=tmp_root,
             task_description=args.task_description,
             counts=counts,
+            state_schema=args.state_schema,
         )
         verify_output(tmp_root)
 
