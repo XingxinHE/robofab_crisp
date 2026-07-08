@@ -51,3 +51,4 @@ def test_pixi_exposes_no_target_gamepad_act_deployment_task() -> None:
     task = pixi["tasks"]["deploy-act-fr3-3cams-gamepad-no-target"]
     assert "deployment.act.preflight_fr3_3cams_gamepad_no_target" in task
     assert "local/fr3_gamepad_3cams_deploy_no_target" in task
+    assert "--clamp-state-gripper-zero-defaults" in task
