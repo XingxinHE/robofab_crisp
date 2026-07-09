@@ -26,6 +26,7 @@ Options:
   --batch-size <n>                Batch size (default 8).
   --save-freq <n>                 Checkpoint save frequency (default 10000).
   --log-freq <n>                  Log frequency (default 100).
+  --dataset-contract <mode>       Contract check: auto, none, reach-open-notarget.
   --smoke                         Fast sanity run (2000 steps, save every 1000).
   -- <extra lerobot args>         Forward additional args to lerobot train.
 
@@ -42,6 +43,7 @@ STEPS="50000"
 BATCH_SIZE="8"
 SAVE_FREQ="10000"
 LOG_FREQ="100"
+DATASET_CONTRACT="auto"
 SMOKE=0
 EXTRA_ARGS=()
 
@@ -71,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       LOG_FREQ="$2"
       shift 2
       ;;
+    --dataset-contract)
+      DATASET_CONTRACT="$2"
+      shift 2
+      ;;
     --smoke)
       SMOKE=1
       shift
@@ -96,6 +102,33 @@ fi
 if [[ "${SMOKE}" -eq 1 ]]; then
   STEPS="2000"
   SAVE_FREQ="1000"
+fi
+
+case "${DATASET_CONTRACT}" in
+  auto|none|reach-open-notarget)
+    ;;
+  *)
+    echo "[train-act] Unknown --dataset-contract mode: ${DATASET_CONTRACT}" >&2
+    exit 2
+    ;;
+esac
+
+RUN_REACH_OPEN_CONTRACT=0
+if [[ "${DATASET_CONTRACT}" == "reach-open-notarget" ]]; then
+  RUN_REACH_OPEN_CONTRACT=1
+elif [[ "${DATASET_CONTRACT}" == "auto" ]]; then
+  if [[ "${DATASET_REPO_ID}" == *"ReachBlueButton"* && "${DATASET_REPO_ID}" == *"notarget"* && "${DATASET_REPO_ID}" != *"ReachPress"* ]]; then
+    RUN_REACH_OPEN_CONTRACT=1
+  fi
+fi
+
+if [[ "${RUN_REACH_OPEN_CONTRACT}" -eq 1 ]]; then
+  echo "[train-act] checking reach-open no-target dataset contract"
+  python "${SCRIPT_DIR}/../dataset/validate_lerobot_contract.py" \
+    --repo-id "${DATASET_REPO_ID}" \
+    --expect-no-target-state \
+    --expect-gripper-action-open \
+    --warn-gripper-state-std-below 1e-5
 fi
 
 echo "[train-act] dataset=${DATASET_REPO_ID} steps=${STEPS} batch=${BATCH_SIZE}"

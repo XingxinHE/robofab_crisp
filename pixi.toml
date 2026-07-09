@@ -38,7 +38,12 @@ preflight-deploy-fr3-3cams-gamepad-no-target = "python -m deployment.act.preflig
 deploy-act-fr3 = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3 --default-repo-id local/fr3_dualcam_streamed_deploy --preflight-module deployment.act.preflight_fr3 --env-namespace \"\" --use-namespace-arg 0 --forbid-env-namespace-arg 0"
 deploy-act-fr3-3cams = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams --default-repo-id local/fr3_leader_follower_3cams_open_deploy --preflight-module deployment.act.preflight_fr3_3cams --env-namespace right --use-namespace-arg 1 --forbid-env-namespace-arg 0"
 deploy-act-fr3-3cams-gamepad = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams-gamepad --default-repo-id local/fr3_gamepad_3cams_deploy --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1"
+
+# clamp observation gripper only
 deploy-act-fr3-3cams-gamepad-no-target = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams-gamepad-no-target --default-repo-id local/fr3_gamepad_3cams_deploy_no_target --preflight-module deployment.act.preflight_fr3_3cams_gamepad_no_target --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1 --clamp-state-gripper-zero-defaults"
+# clamp observation gripper + force action[6] = 1.0 (gripper forced to open)
+deploy-act-fr3-3cams-gamepad-no-target-open-override = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams-gamepad-no-target-open-override --default-repo-id local/fr3_gamepad_3cams_deploy_no_target_open_override --preflight-module deployment.act.preflight_fr3_3cams_gamepad_no_target --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1 --clamp-state-gripper-zero-defaults --override-action-gripper-default 1.0"
+
 deploy-act-fr3-3cams-gamepad-no-auto-home = "bash deployment/act/deploy_profiled.sh --profile-name deploy-act-fr3-3cams-gamepad-no-auto-home --default-repo-id local/fr3_gamepad_3cams_deploy_no_auto_home --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1 --no-auto-home-defaults"
 deploy-pi0-fr3-3cams-gamepad = "bash deployment/pi0/deploy_profiled.sh --profile-name deploy-pi0-fr3-3cams-gamepad --default-repo-id local/fr3_pi0_3cams_gamepad_deploy --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1"
 deploy-dp-fr3-3cams-gamepad = "bash deployment/dp/deploy_profiled.sh --profile-name deploy-dp-fr3-3cams-gamepad --default-repo-id local/fr3_dp_3cams_gamepad_deploy --preflight-module deployment.act.preflight_fr3_3cams_gamepad --env-namespace \"\" --use-namespace-arg 1 --forbid-env-namespace-arg 1"
@@ -48,6 +53,7 @@ deploy-gr00t-1p7-fr3-3cams-gamepad-joint = "bash deployment/gr00t/deploy_1p7_pro
 episode-stats = "python analysis/episode_stats.py"
 episode-video-info = "python analysis/episode_video_info.py"
 gripper-align-check = "python analysis/gripper_alignment_check.py"
+validate-lerobot-contract = "python dataset/validate_lerobot_contract.py"
 episode-playback = "python analysis/episode_robot_playback.py"
 
 [dependencies]

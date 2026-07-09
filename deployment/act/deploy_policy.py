@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import crisp_gym  # noqa: F401
 import numpy as np
@@ -23,7 +23,7 @@ from crisp_gym.policy.policy import list_policy_configs
 from crisp_gym.record.evaluate import Evaluator
 from crisp_gym.record.recording_manager import make_recording_manager
 from crisp_gym.util import prompt
-from crisp_gym.util.lerobot_features import get_features
+from crisp_gym.util.lerobot_features import concatenate_state_features, get_features
 from crisp_gym.util.setup_logger import setup_logging
 from crisp_py.utils.geometry import Pose
 from scipy.spatial.transform import Rotation
@@ -34,6 +34,8 @@ from teleoperations.gamepad.gamepad_6dof_interface import (
     XboxGamepad6Dof,
 )
 from teleoperations.gamepad.home_config import get_gamepad_home_config
+
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -132,6 +134,17 @@ def parse_args() -> argparse.Namespace:
             "Force observation.state.gripper and observation.state[6] to 0.0 "
             "before ACT inference and recording. Intended for no-target reach "
             "debugging when a tiny real gripper offset is out of distribution."
+        ),
+    )
+    parser.add_argument(
+        "--override-action-gripper",
+        type=float,
+        default=None,
+        metavar="VALUE",
+        help=(
+            "Override the applied ACT gripper action with a normalized CRISP "
+            "target in [0, 1]. Use 1.0 to hold the Franka hand open for "
+            "reach-only legacy checkpoints."
         ),
     )
     return parser.parse_args()
@@ -265,6 +278,53 @@ def install_gripper_state_clamp(env: ManipulatorBaseEnv, value: float = 0.0) -> 
         return obs
 
     env.get_obs = get_obs_with_clamped_gripper  # type: ignore[method-assign]
+
+
+def override_action_gripper(action: np.ndarray, value: float) -> np.ndarray:
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"Gripper override must be in [0, 1], got {value}")
+
+    applied_action = np.array(action, copy=True)
+    if applied_action.ndim == 0 or applied_action.shape[-1] < 1:
+        raise ValueError(
+            f"Expected action with a gripper dimension, got shape {applied_action.shape}"
+        )
+
+    applied_action[..., -1] = np.asarray(value, dtype=applied_action.dtype)
+    return applied_action
+
+
+def make_policy_data_fn(
+    policy: Any,
+    override_gripper: float | None = None,
+) -> Callable[[], tuple[dict[str, Any], np.ndarray]]:
+    if override_gripper is None:
+        return policy.make_data_fn()
+
+    if not hasattr(policy, "env") or not hasattr(policy, "parent_conn"):
+        raise TypeError(
+            "Gripper action override currently requires a CRISP LerobotPolicy-like "
+            "object with env and parent_conn attributes."
+        )
+
+    def _fn() -> tuple[dict[str, Any], np.ndarray]:
+        LOGGER.debug("Requesting action from policy...")
+        obs_raw = policy.env.get_obs()
+        obs_raw["observation.state"] = concatenate_state_features(obs_raw)
+
+        policy.parent_conn.send(obs_raw)
+        policy_action = policy.parent_conn.recv().squeeze(0).to("cpu").numpy()
+        applied_action = override_action_gripper(policy_action, value=override_gripper)
+        LOGGER.debug("Policy action: %s; applied action: %s", policy_action, applied_action)
+
+        try:
+            policy.env.step(applied_action, block=False)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("Error during environment step: %s", exc)
+
+        return obs_raw, applied_action
+
+    return _fn
 
 
 def _read_current_gripper_target(env: ManipulatorBaseEnv, fallback: float) -> float:
@@ -495,6 +555,17 @@ def main() -> int:
                 "before ACT inference."
             )
             install_gripper_state_clamp(env, value=0.0)
+        if args.override_action_gripper is not None:
+            if not 0.0 <= args.override_action_gripper <= 1.0:
+                raise ValueError(
+                    "--override-action-gripper must be in [0, 1], "
+                    f"got {args.override_action_gripper}"
+                )
+            logger.warning(
+                "Overriding applied ACT gripper action to %.3f before env.step() "
+                "and rollout recording.",
+                args.override_action_gripper,
+            )
 
         features = get_features(env)
         evaluator = Evaluator(output_file="eval/" + evaluation_file)
@@ -571,7 +642,10 @@ def main() -> int:
                         recording_manager.num_episodes,
                     )
                     recording_manager.record_episode(
-                        data_fn=policy.make_data_fn(),
+                        data_fn=make_policy_data_fn(
+                            policy,
+                            override_gripper=args.override_action_gripper,
+                        ),
                         task="Pick up the lego block.",
                         on_start=on_start,
                         on_end=on_end,

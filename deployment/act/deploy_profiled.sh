@@ -12,6 +12,7 @@ FORBID_ENV_NAMESPACE_ARG="0"
 RECORDING_MANAGER_TYPE="keyboard"
 NO_AUTO_HOME_DEFAULTS="0"
 CLAMP_STATE_GRIPPER_ZERO_DEFAULTS="0"
+OVERRIDE_ACTION_GRIPPER_DEFAULT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,6 +48,10 @@ while [[ $# -gt 0 ]]; do
     --clamp-state-gripper-zero-defaults)
       CLAMP_STATE_GRIPPER_ZERO_DEFAULTS="1"
       shift
+      ;;
+    --override-action-gripper-default)
+      OVERRIDE_ACTION_GRIPPER_DEFAULT="$2"
+      shift 2
       ;;
     --)
       shift
@@ -85,6 +90,7 @@ Defaults:
   --home-config <name-or-path>        Optional robot YAML or homes/*.yaml for deployment homing
   --after-teleop <name-or-path>       Optional final home after all deployment episodes
   --clamp-state-gripper-zero          Clamp ACT observation gripper state to 0.0
+  --override-action-gripper <value>   Override applied ACT gripper action
 EOF
   if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
     cat <<'EOF'
@@ -216,6 +222,9 @@ fi
 if [[ "${CLAMP_STATE_GRIPPER_ZERO_DEFAULTS}" == "1" ]]; then
   echo "[${PROFILE_NAME}] Gripper state observation clamp enabled"
 fi
+if [[ -n "${OVERRIDE_ACTION_GRIPPER_DEFAULT}" ]]; then
+  echo "[${PROFILE_NAME}] Gripper action override enabled: ${OVERRIDE_ACTION_GRIPPER_DEFAULT}"
+fi
 
 PROFILE_DEFAULT_ARGS=()
 if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
@@ -223,6 +232,9 @@ if [[ "${NO_AUTO_HOME_DEFAULTS}" == "1" ]]; then
 fi
 if [[ "${CLAMP_STATE_GRIPPER_ZERO_DEFAULTS}" == "1" ]]; then
   PROFILE_DEFAULT_ARGS+=("--clamp-state-gripper-zero")
+fi
+if [[ -n "${OVERRIDE_ACTION_GRIPPER_DEFAULT}" ]]; then
+  PROFILE_DEFAULT_ARGS+=("--override-action-gripper" "${OVERRIDE_ACTION_GRIPPER_DEFAULT}")
 fi
 
 exec python -m deployment.act.deploy_policy \
