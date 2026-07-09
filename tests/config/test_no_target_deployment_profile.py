@@ -39,7 +39,7 @@ def test_no_target_preflight_selects_no_target_env_config_names() -> None:
     )
 
 
-def test_pixi_exposes_no_target_gamepad_act_deployment_task() -> None:
+def test_pixi_exposes_no_target_gamepad_act_deployment_tasks() -> None:
     with (ROOT / "pixi.toml").open("rb") as f:
         pixi = tomllib.load(f)
 
@@ -48,7 +48,16 @@ def test_pixi_exposes_no_target_gamepad_act_deployment_task() -> None:
         "python -m deployment.act.preflight_fr3_3cams_gamepad_no_target"
     )
 
-    task = pixi["tasks"]["deploy-act-fr3-3cams-gamepad-no-target"]
-    assert "deployment.act.preflight_fr3_3cams_gamepad_no_target" in task
-    assert "local/fr3_gamepad_3cams_deploy_no_target" in task
-    assert "--clamp-state-gripper-zero-defaults" in task
+    corrected_policy_task = pixi["tasks"]["deploy-act-fr3-3cams-gamepad-no-target"]
+    assert "deployment.act.preflight_fr3_3cams_gamepad_no_target" in corrected_policy_task
+    assert "local/fr3_gamepad_3cams_deploy_no_target" in corrected_policy_task
+    assert "--clamp-state-gripper-zero-defaults" in corrected_policy_task
+    assert "--override-action-gripper-default" not in corrected_policy_task
+
+    legacy_override_task = pixi["tasks"][
+        "deploy-act-fr3-3cams-gamepad-no-target-open-override"
+    ]
+    assert "deployment.act.preflight_fr3_3cams_gamepad_no_target" in legacy_override_task
+    assert "local/fr3_gamepad_3cams_deploy_no_target_open_override" in legacy_override_task
+    assert "--clamp-state-gripper-zero-defaults" in legacy_override_task
+    assert "--override-action-gripper-default 1.0" in legacy_override_task
