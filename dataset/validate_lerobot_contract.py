@@ -22,6 +22,7 @@ class ContractArgs:
     repo_id: str | None = None
     dataset_dir: Path | None = None
     expect_no_target_state: bool = False
+    expect_act_state_only: bool = False
     expect_gripper_action_open: bool = False
     open_action_threshold: float = 0.5
     min_open_action_fraction: float = 0.99
@@ -112,6 +113,14 @@ def _has_target_state(info: dict, files: list[Path]) -> bool:
     return False
 
 
+def _redundant_act_state_features(info: dict) -> list[str]:
+    return sorted(
+        key
+        for key in info.get("features", {})
+        if key.startswith("observation.state.") and key != "observation.state"
+    )
+
+
 def validate_dataset(args: ContractArgs) -> ContractReport:
     dataset_dir = resolve_dataset_dir(args)
     if not dataset_dir.exists():
@@ -126,6 +135,15 @@ def validate_dataset(args: ContractArgs) -> ContractReport:
             raise ContractError("Dataset contains observation.state.target but no-target state was required.")
         if state_dim is not None and state_dim != 14:
             raise ContractError(f"Expected 14D no-target observation.state, got {state_dim}D.")
+
+    if args.expect_act_state_only:
+        redundant_features = _redundant_act_state_features(info)
+        if redundant_features:
+            raise ContractError(
+                "Redundant ACT state feature metadata found: "
+                f"{redundant_features}. Keep only observation.state in meta/info.json "
+                "for ACT training; extra parquet columns may remain."
+            )
 
     columns = ["action", "observation.state.gripper"]
     data = _read_columns(files, columns)
@@ -179,6 +197,7 @@ def _parse_args(argv: list[str]) -> ContractArgs:
     parser.add_argument("--repo-id", type=str, default=None)
     parser.add_argument("--dataset-dir", type=Path, default=None)
     parser.add_argument("--expect-no-target-state", action="store_true", default=False)
+    parser.add_argument("--expect-act-state-only", action="store_true", default=False)
     parser.add_argument("--expect-gripper-action-open", action="store_true", default=False)
     parser.add_argument("--open-action-threshold", type=float, default=0.5)
     parser.add_argument("--min-open-action-fraction", type=float, default=0.99)

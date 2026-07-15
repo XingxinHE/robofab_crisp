@@ -52,6 +52,12 @@ CRISP14_REQUIRED_INPUT_COLUMNS = [
     "observation.state.joints",
     "action",
 ]
+CRISP_REDUNDANT_STATE_FEATURES = [
+    "observation.state.cartesian",
+    "observation.state.gripper",
+    "observation.state.joints",
+    "observation.state.target",
+]
 CRISP14_OUTPUT_COLUMNS = [
     "observation.state.cartesian",
     "observation.state.gripper",
@@ -614,7 +620,8 @@ def make_output_info(
     output_info = copy.deepcopy(reference_info)
     if state_schema == STATE_SCHEMA_CRISP14_NO_TARGET:
         features = output_info.setdefault("features", {})
-        features.pop("observation.state.target", None)
+        for key in CRISP_REDUNDANT_STATE_FEATURES:
+            features.pop(key, None)
         state_feature = copy.deepcopy(features.get("observation.state", {}))
         state_feature.update(
             {

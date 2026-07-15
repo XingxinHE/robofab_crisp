@@ -127,6 +127,7 @@ if [[ "${RUN_REACH_OPEN_CONTRACT}" -eq 1 ]]; then
   python "${SCRIPT_DIR}/../dataset/validate_lerobot_contract.py" \
     --repo-id "${DATASET_REPO_ID}" \
     --expect-no-target-state \
+    --expect-act-state-only \
     --expect-gripper-action-open \
     --warn-gripper-state-std-below 1e-5
 fi
