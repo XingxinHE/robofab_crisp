@@ -11,7 +11,13 @@ import pytest
 from dataset.validate_lerobot_contract import ContractArgs, ContractError, validate_dataset
 
 
-def _write_dataset(root: Path, *, gripper_action: float, include_target: bool = False) -> None:
+def _write_dataset(
+    root: Path,
+    *,
+    gripper_action: float,
+    include_target: bool = False,
+    include_cartesian_and_joints_features: bool = False,
+) -> None:
     (root / "data" / "chunk-000").mkdir(parents=True)
     (root / "meta").mkdir()
 
@@ -37,6 +43,17 @@ def _write_dataset(root: Path, *, gripper_action: float, include_target: bool = 
             "dtype": "float32",
             "shape": [6],
             "names": ["target_x", "target_y", "target_z", "target_roll", "target_pitch", "target_yaw"],
+        }
+    if include_cartesian_and_joints_features:
+        features["observation.state.cartesian"] = {
+            "dtype": "float32",
+            "shape": [6],
+            "names": ["x", "y", "z", "roll", "pitch", "yaw"],
+        }
+        features["observation.state.joints"] = {
+            "dtype": "float32",
+            "shape": [7],
+            "names": [f"joint_{i}" for i in range(7)],
         }
 
     info = {
@@ -64,6 +81,9 @@ def _write_dataset(root: Path, *, gripper_action: float, include_target: bool = 
     }
     if include_target:
         rows["observation.state.target"] = [[0.0] * 6, [1.0] * 6, [2.0] * 6]
+    if include_cartesian_and_joints_features:
+        rows["observation.state.cartesian"] = [[0.0] * 6, [1.0] * 6, [2.0] * 6]
+        rows["observation.state.joints"] = [[0.0] * 7, [1.0] * 7, [2.0] * 7]
 
     table = pa.Table.from_pydict(rows)
     pq.write_table(table, root / "data" / "chunk-000" / "episode_000000.parquet")
@@ -109,5 +129,26 @@ def test_validate_no_target_contract_rejects_target_state(tmp_path: Path) -> Non
                 dataset_dir=dataset,
                 expect_no_target_state=True,
                 expect_gripper_action_open=True,
+            )
+        )
+
+
+def test_validate_act_state_only_rejects_redundant_state_feature_metadata(
+    tmp_path: Path,
+) -> None:
+    dataset = tmp_path / "ReachPressBlueButton_duplicate_state_features"
+    _write_dataset(
+        dataset,
+        gripper_action=1.0,
+        include_cartesian_and_joints_features=True,
+    )
+
+    with pytest.raises(ContractError, match="Redundant ACT state feature metadata"):
+        validate_dataset(
+            ContractArgs(
+                dataset_dir=dataset,
+                expect_no_target_state=True,
+                expect_gripper_action_open=True,
+                expect_act_state_only=True,
             )
         )

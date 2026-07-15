@@ -278,7 +278,13 @@ def test_crisp14_no_target_merge_rebuilds_state_and_drops_target(
     info = json.loads((output / "meta" / "info.json").read_text(encoding="utf-8"))
     assert info["features"]["observation.state"]["shape"] == [14]
     assert info["features"]["observation.state"]["names"] == STATE14_NAMES
-    assert "observation.state.target" not in info["features"]
+    for redundant_key in (
+        "observation.state.cartesian",
+        "observation.state.gripper",
+        "observation.state.joints",
+        "observation.state.target",
+    ):
+        assert redundant_key not in info["features"]
 
     for episode_index, expected_start_index in [(0, 0), (1, 2)]:
         parquet_path = merge_subset.data_path(info, output, episode_index)
